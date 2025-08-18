@@ -1,0 +1,129 @@
+
+<div id="dtools_quote_content">
+  <h2>Quote Details</h2>
+
+
+  <%= @dtools_search_and_jobsites.result(binding) %>
+
+  <!-- Quote Information -->
+  <div class="collapsible">
+    <button class="collapsible-button">Quote Information</button>
+    <div class="collapsible-content">
+      <p><strong>ID:</strong> <%= quote_data["id"] %></p>
+      <p><strong>Opportunity ID:</strong> <%= quote_data["opportunityId"] %></p>
+      <p><strong>Name:</strong> <%= quote_data["name"] %></p>
+      <p><strong>Number:</strong> <%= quote_data["number"] %></p>
+      <p><strong>Version:</strong> <%= quote_data["version"] %></p>
+      <p><strong>System State:</strong> <%= quote_data["systemState"] %></p>
+      <p><strong>State:</strong> <%= quote_data["state"] %></p>
+      <p><strong>Price:</strong> <%= quote_data["price"] %></p>
+      <p><strong>Created Date:</strong> <%= quote_data["createdDate"] %></p>
+      <p><strong>Modified Date:</strong> <%= quote_data["modifiedDate"] %></p>
+      <p><strong>Description:</strong> <%= quote_data["projectDescription"] %></p>
+    </div>
+  </div>
+
+  <!-- Items by System -->
+  <div class="collapsible">
+    <button class="collapsible-button">Items by System</button>
+    <div class="collapsible-content">
+      <% quote_data["systems"].each do |system| %>
+        <% system_items = quote_data["items"].select { |item| item["systemId"] == system["id"] } %>
+        <% if system_items.any? %>
+          <div class="collapsible">
+            <button class="collapsible-button">System: <%= system["name"] %> (<%= system_items.size %>)</button>
+            <div class="collapsible-content">
+              <% system_items.each do |item| %>
+                <div class="item">
+                  <p><strong>Item:</strong> <%= item["name"] %></p>
+                  <p><strong>Type:</strong> <%= item["type"] %></p>
+                  <p><strong>Quantity:</strong> <%= item["quantity"] %></p>
+                  <p><strong>Unit Price:</strong> <%= item["unitPrice"] %></p>
+                  <p><strong>Description:</strong> <%= item["description"] %></p>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+  </div>
+
+  <!-- Items by Location -->
+  <div class="collapsible">
+    <button class="collapsible-button">Items by Location</button>
+    <div class="collapsible-content">
+      <% quote_data["locations"].each do |location| %>
+        <% location_items = quote_data["items"].select { |item| item["locationId"] == location["id"] } %>
+        <% if location_items.any? %>
+          <div class="collapsible">
+            <button class="collapsible-button">Location: <%= location["name"] %> (<%= location_items.size %>)</button>
+            <div class="collapsible-content">
+              <% location_items.each do |item| %>
+                <div class="item">
+                  <p><strong>Item:</strong> <%= item["name"] %></p>
+                  <p><strong>Type:</strong> <%= item["type"] %></p>
+                  <p><strong>Quantity:</strong> <%= item["quantity"] %></p>
+                  <p><strong>Unit Price:</strong> <%= item["unitPrice"] %></p>
+                  <p><strong>Description:</strong> <%= item["description"] %></p>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+  </div>
+
+  <!-- Items by Phase -->
+  <div class="collapsible">
+    <button class="collapsible-button">Items by Phase</button>
+    <div class="collapsible-content">
+      <% quote_data["phases"].each do |phase| %>
+        <% phase_items = quote_data["items"].select { |item| item["phaseId"] == phase["id"] } %>
+        <% if phase_items.any? %>
+          <div class="collapsible">
+            <button class="collapsible-button">Phase: <%= phase["name"] %> (<%= phase_items.size %>)</button>
+            <div class="collapsible-content">
+              <% phase_items.each do |item| %>
+                <div class="item">
+                  <p><strong>Item:</strong> <%= item["name"] %></p>
+                  <p><strong>Type:</strong> <%= item["type"] %></p>
+                  <p><strong>Quantity:</strong> <%= item["quantity"] %></p>
+                  <p><strong>Unit Price:</strong> <%= item["unitPrice"] %></p>
+                  <p><strong>Description:</strong> <%= item["description"] %></p>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+  </div>
+
+  <!-- Labor Types -->
+  <div class="collapsible">
+    <button class="collapsible-button">Labor Types</button>
+    <div class="collapsible-content">
+      <% quote_data["laborTypes"].each do |labor_type| %>
+        <p><strong>Name:</strong> <%= labor_type["name"] %></p>
+        <p><strong>Hourly Cost:</strong> <%= labor_type["hourlyCost"] %></p>
+        <p><strong>Hourly Price:</strong> <%= labor_type["hourlyPrice"] %></p>
+      <% end %>
+    </div>
+  </div>
+
+  <!-- Service Plans -->
+  <div class="collapsible">
+    <button class="collapsible-button">Service Plans</button>
+    <div class="collapsible-content">
+      <% quote_data["servicePlans"].each do |service_plan| %>
+        <p><strong>Name:</strong> <%= service_plan["name"] %></p>
+        <p><strong>Price:</strong> <%= service_plan["fixedPrice"] %></p>
+        <p><strong>Description:</strong> <%= service_plan["description"] %></p>
+      <% end %>
+    </div>
+  </div>
+  
+</div>
+

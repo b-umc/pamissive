@@ -1,0 +1,43 @@
+<div class="search-section">
+  <input type="text" id="jobsite-search" placeholder="Search jobsite..." value="<%= current_search %>" />
+</div>
+
+<!-- Collapsible List of Jobsites and Quotes -->
+<div class="collapsible">
+  <button class="collapsible-button">Jobsites</button>
+  <div class="collapsible-content">
+    <% jobsites.each do |jobsite| %>
+      <div class="collapsible">
+        <button class="collapsible-button">Jobsite: <%= jobsite["name"] %></button>
+        <div class="collapsible-content">
+          <% jobsite["quotes"].each do |quote| %>
+            <div class="quote-item">
+              <button class="quote-button" data-quote-id="<%= quote["id"] %>">
+                Quote: <%= quote["name"] %> (Version: <%= quote["version"] %>)
+              </button>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    const searchField = document.getElementById('jobsite-search');
+    searchField.value = "<%= current_search %>";
+
+    searchField.addEventListener('input', function() {
+      console.log('Search field updated:', searchField.value);
+    });
+
+    const quoteButtons = document.querySelectorAll('.quote-button');
+    quoteButtons.forEach(button => {
+      button.addEventListener('click', function() {
+        const quoteId = this.dataset.quoteId;
+        console.log('Selected quote ID:', quoteId);
+      });
+    });
+  });
+</script>

@@ -1,0 +1,35 @@
+# --- Credentials and Environment Files ---
+# Never commit your environment variables or secret keys.
+.env
+envkey.pem
+
+# --- Ruby / Bundler ---
+# Ignore local gem installations and dependency caches.
+/.bundle
+/vendor/bundle
+Gemfile.lock
+*.gem
+*.rbc
+
+# --- Logs and Temporary Files ---
+# Ignore log files and other temporary data.
+/log/*
+!/log/.keep
+/tmp
+*.log
+*.swp
+*.tmp
+
+# --- System and Editor Files ---
+# Ignore OS-specific and editor-specific files.
+.DS_Store
+.idea/
+.vscode/
+
+# --- Obsolete Files ---
+# Ignore any backup or copied files you might create locally.
+* copy.*
+* copy
+*.bak
+
+
