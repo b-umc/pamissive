@@ -8,7 +8,6 @@ class QuickbooksTime
   attr_accessor :auth
 
   def initialize(qbt:, repos:, cursor:, queue:, limiter:, auth: nil)
-
     @qbt = qbt
     @repos = repos
     @cursor = cursor
@@ -23,6 +22,7 @@ class QuickbooksTime
   end
 
   def authorized
+    LOG.info [:quickbooks_time_sync_start]
     UsersSyncer.new(qbt, repos).run do |ok|
       return on_fail(:users) unless ok
       JobsSyncer.new(qbt, repos).run do |ok2|
@@ -30,6 +30,8 @@ class QuickbooksTime
         TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |ok3|
           return on_fail(:timesheets) unless ok3
           QuickbooksTime::Missive::Dispatcher.start(queue, limiter)   # background drainer
+          LOG.info [:quickbooks_time_sync_complete]
+
         end
       end
     end
@@ -42,7 +44,7 @@ class QuickbooksTime
   def status
     auth&.status || false
   end
-  
+
   def status
     false
   end

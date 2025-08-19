@@ -5,7 +5,6 @@ require_relative '../missive/queue'
 require_relative '../streams/timesheet_stream'
 require_relative 'overview_refresher'
 
-
 class TimesheetsSyncer
   def initialize(qbt, repos, cursor)
     @stream = TimesheetStream.new(qbt_client: qbt, cursor_store: cursor, limit: Constants::QBT_PAGE_LIMIT)

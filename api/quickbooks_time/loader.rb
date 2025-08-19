@@ -37,8 +37,6 @@ QBT = QuickbooksTime.new(
   limiter: limiter
 ) unless defined?(QBT)
 
-
 server = NonBlockHTTP::Manager.server(port: 8080)
 auth   = QuickbooksTime::AuthServer.new(server, proc { |*| QBT.authorized })
 QBT.auth = auth
-
