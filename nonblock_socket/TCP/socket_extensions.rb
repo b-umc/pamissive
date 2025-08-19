@@ -23,17 +23,17 @@ module NonBlockSocket::TCP::SocketExtensions::SocketIO
   def read_chunk
     # LOG.debug(['reading'])
     s = to_sock
-    return on_disconnect(nil) if s.eof?
-
-    dat = s.read_nonblock(CHUNK_LENGTH)
-    # LOG.debug(['read', dat[0, 50], ' ... ', dat[-50, 50].to_s])
-    raise(EOFError, 'Nil return on readable') unless dat
+    dat = s.read_nonblock(CHUNK_LENGTH, exception: false)
+    return if dat == :wait_readable
+    return on_disconnect if dat.nil? || dat.empty?
 
     handle_data(dat)
+    on_disconnect if s.eof?
   rescue EOFError, Errno::EPIPE, Errno::ECONNREFUSED, Errno::ECONNRESET => e
     # LOG.debug([:read_chunk_error, :read, dat.to_s.length, e])
     LOG.debug('eof')
-    on_disconnect(dat)
+    handle_data(dat) if dat && !dat.empty?
+    on_disconnect
     on_error(e, e.backtrace)
   rescue IO::WaitReadable
     # IO not ready yet
