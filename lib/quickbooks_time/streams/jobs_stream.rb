@@ -10,7 +10,7 @@ class JobsStream
     @qbt.jobcodes(page: page, limit: @limit) do |resp|
       return done&.call(false) unless resp
 
-      rows = resp['jobcodes'] || []
+      rows = resp.dig('results', 'jobcodes')&.values || []
       on_rows.call(rows) unless rows.empty?
 
       if resp['more'] && rows.any?

@@ -10,7 +10,8 @@ class UsersStream
     @qbt.users(page: page, limit: @limit) do |resp|
       return done&.call(false) unless resp
 
-      rows = resp['users'] || []
+      rows = resp.dig('results', 'users')&.values || []
+
       on_rows.call(rows) unless rows.empty?
 
       if resp['more'] && rows.any?

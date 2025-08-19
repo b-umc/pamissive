@@ -34,7 +34,7 @@ class TimesheetStream
   end
 
   def sort_rows(resp)
-    rows = resp['timesheets'] || []
+    rows = resp.dig('results', 'timesheets')&.values || []
     rows.sort_by { |r| [r['last_modified'], r['id']] }
   end
 

@@ -3,6 +3,9 @@
 require 'json'
 require 'uri'
 require_relative '../../nonblock_HTTP/manager'
+require_relative '../../logging/app_logger'
+LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
+
 
 class QbtClient
   API_ENDPOINT = 'https://rest.tsheets.com/api/v1'
@@ -36,19 +39,29 @@ class QbtClient
 
   def api_request(endpoint, &blk)
     token = @token_provider&.call
-    return blk.call(nil) unless token
+    unless token
+      LOG.error [:qbt_api_request_missing_token, endpoint]
+      return blk.call(nil)
+    end
 
     headers = { 'Authorization' => "Bearer #{token}" }
     url = "#{API_ENDPOINT}/#{endpoint}"
 
     NonBlockHTTP::Client::ClientSession.new.get(url, { headers: headers }, log_debug: true) do |response|
-      next blk.call(nil) unless response
-
-      if response.code == 404 && endpoint.start_with?('timesheets')
-        return blk.call({ 'timesheets' => [], 'more' => false })
+      unless response
+        LOG.error [:qbt_api_request_failed, endpoint, :no_response]
+        return blk.call(nil)
       end
 
-      next blk.call(nil) unless response.code == 200
+      if response.code == 404 && endpoint.start_with?('timesheets')
+        return blk.call({ 'results' => { 'timesheets' => {} }, 'more' => false })
+      end
+
+      unless response.code == 200
+        LOG.error [:qbt_api_request_failed, endpoint, response.code]
+        return blk.call(nil)
+      end
+
 
       begin
         blk.call(JSON.parse(response.body))
