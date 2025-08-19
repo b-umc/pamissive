@@ -6,15 +6,18 @@ class JobsStream
     @limit = limit
   end
 
-  def each_batch
-    page = 1
-    loop do
-      resp = @qbt.jobcodes(page: page, limit: @limit)
-      rows = resp['jobcodes'] || []
-      break if rows.empty?
-      yield(rows)
-      break unless resp['more']
-      page += 1
+  def each_batch(on_rows, page = 1, &done)
+    @qbt.jobcodes(page: page, limit: @limit) do |resp|
+      return done&.call(false) unless resp
+
+      rows = resp.dig('results', 'jobcodes')&.values || []
+      on_rows.call(rows) unless rows.empty?
+
+      if resp['more'] && rows.any?
+        each_batch(on_rows, page + 1, &done)
+      else
+        done&.call(true)
+      end
     end
   end
 end
