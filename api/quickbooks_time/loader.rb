@@ -19,6 +19,7 @@ server = NonBlockHTTP::Manager.server(port: 8080)
 auth   = QuickbooksTime::AuthServer.new(server, proc { |*| QBT.authorized })
 
 qbt    = QbtClient.new(-> { auth.token&.access_token })
+
 repos  = OpenStruct.new(
   users:      UsersRepo.new,
   jobs:       JobsRepo.new,
@@ -37,5 +38,6 @@ QBT = QuickbooksTime.new(
   queue: queue,
   limiter: limiter
 ) unless defined?(QBT)
+
 
 QBT.auth = auth

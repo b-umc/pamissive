@@ -44,6 +44,10 @@ class QuickbooksTime
     auth&.status || false
   end
 
+  def status
+    false
+  end
+
   private
 
   def on_fail(stage)
