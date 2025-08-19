@@ -16,6 +16,7 @@ require_relative '../../lib/quickbooks_time/util/constants'
 require_relative '../../nonblock_HTTP/manager'
 require_relative 'auth_server'
 
+
 qbt    = QbtClient.new
 repos  = OpenStruct.new(
   users:      UsersRepo.new,

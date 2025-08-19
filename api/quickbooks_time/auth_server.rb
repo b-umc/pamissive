@@ -42,7 +42,7 @@ module QuickbooksTime::AuthServer::QuickbooksTimeConstants
   QBT_CLIENT_ID = ENV.fetch('QBT_CLIENT_ID', nil)
   QBT_CLIENT_SECRET = ENV.fetch('QBT_CLIENT_SECRET', nil)
   QBT_TOKEN_SECRET = ENV.fetch('QBT_TOKEN_SECRET', nil)
-  REDIRECT_URI = ENV.fetch('QBT_TOKEN_SECRET', nil)
+  REDIRECT_URI = ENV.fetch('QBT_REDIRECT_URI', nil)
   AUTHORIZATION_BASE_URL = 'https://rest.tsheets.com/api/v1/authorize'
   TOKEN_URL = 'https://rest.tsheets.com/api/v1/grant'
   HEADERS = {
