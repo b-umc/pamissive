@@ -21,7 +21,7 @@ class QuickbooksTime
         return on_fail(:jobs) unless ok2
         TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |ok3|
           return on_fail(:timesheets) unless ok3
-          Missive::Dispatcher.start(queue, limiter)   # background drainer
+          QuickbooksTime::Missive::Dispatcher.start(queue, limiter)   # background drainer
         end
       end
     end

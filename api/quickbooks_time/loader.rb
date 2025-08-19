@@ -23,7 +23,7 @@ repos  = OpenStruct.new(
   sync_log:   SyncLogRepo.new
 )
 cursor  = CursorStore.new
-queue   = Missive::Queue
+queue   = QuickbooksTime::Missive::Queue
 limiter = RateLimiter.new(interval: Constants::MISSIVE_POST_MIN_INTERVAL)
 
 QBT = QuickbooksTime.new(
