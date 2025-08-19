@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../streams/users_stream'
+
 class UsersSyncer
   def initialize(qbt, repos)
     @stream = UsersStream.new(qbt_client: qbt, limit: Constants::QBT_PAGE_LIMIT)

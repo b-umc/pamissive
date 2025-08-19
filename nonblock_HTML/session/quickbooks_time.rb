@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 require 'erb'
-require_relative '../../api/quickbooks_time/quickbooks_time'
+require_relative '../../api/quickbooks_time/loader'
 
 class NonBlockHTML::Server; end
 class NonBlockHTML::Server::Session; end
