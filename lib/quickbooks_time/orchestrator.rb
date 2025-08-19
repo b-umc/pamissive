@@ -24,14 +24,23 @@ class QuickbooksTime
   def authorized
     LOG.info [:quickbooks_time_sync_start]
     UsersSyncer.new(qbt, repos).run do |ok|
-      return on_fail(:users) unless ok
-      JobsSyncer.new(qbt, repos).run do |ok2|
-        return on_fail(:jobs) unless ok2
-        TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |ok3|
-          return on_fail(:timesheets) unless ok3
-          QuickbooksTime::Missive::Dispatcher.start(queue, limiter)   # background drainer
-          LOG.info [:quickbooks_time_sync_complete]
+      if ok
+        JobsSyncer.new(qbt, repos).run do |ok2|
+          if ok2
+            TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |ok3|
+              if ok3
+                QuickbooksTime::Missive::Dispatcher.start(queue, limiter)   # background drainer
+                LOG.info [:quickbooks_time_sync_complete]
+              else
+                on_fail(:timesheets)
+              end
+            end
+          else
+            on_fail(:jobs)
+          end
         end
+      else
+        on_fail(:users)
       end
     end
   end
