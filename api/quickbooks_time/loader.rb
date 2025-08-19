@@ -35,6 +35,7 @@ QBT = QuickbooksTime.new(
   cursor: cursor,
   queue: queue,
   limiter: limiter
+)
 
 
 server = NonBlockHTTP::Manager.server(port: 8080)

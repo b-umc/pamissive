@@ -7,7 +7,7 @@ class QuickbooksTime
   attr_reader :qbt, :repos, :cursor, :queue, :limiter
   attr_accessor :auth
 
-  def initialize(qbt:, repos:, cursor:, queue:, limiter:, auth: nil)
+  # def initialize(qbt:, repos:, cursor:, queue:, limiter:, auth: nil)
 
   def initialize(qbt:, repos:, cursor:, queue:, limiter:)
     @qbt = qbt
