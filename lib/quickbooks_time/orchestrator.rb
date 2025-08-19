@@ -8,6 +8,7 @@ class QuickbooksTime
   attr_accessor :auth
 
   def initialize(qbt:, repos:, cursor:, queue:, limiter:, auth: nil)
+
     @qbt = qbt
     @repos = repos
     @cursor = cursor
@@ -40,6 +41,10 @@ class QuickbooksTime
 
   def status
     auth&.status || false
+  end
+  
+  def status
+    false
   end
 
   private
