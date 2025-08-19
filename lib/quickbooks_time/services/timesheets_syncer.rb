@@ -2,6 +2,9 @@
 
 require_relative '../missive/post_builder'
 require_relative '../missive/queue'
+require_relative '../streams/timesheet_stream'
+require_relative 'overview_refresher'
+
 
 class TimesheetsSyncer
   def initialize(qbt, repos, cursor)
