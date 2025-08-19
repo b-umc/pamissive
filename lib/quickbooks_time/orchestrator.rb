@@ -5,6 +5,9 @@ require_relative 'missive/dispatcher'
 
 class QuickbooksTime
   attr_reader :qbt, :repos, :cursor, :queue, :limiter
+  attr_accessor :auth
+
+  def initialize(qbt:, repos:, cursor:, queue:, limiter:, auth: nil)
 
   def initialize(qbt:, repos:, cursor:, queue:, limiter:)
     @qbt = qbt
@@ -12,6 +15,13 @@ class QuickbooksTime
     @cursor = cursor
     @queue = queue
     @limiter = limiter
+    @auth = auth
+  end
+
+  def auth=(auth)
+    @auth = auth
+    authorized if auth&.status
+
   end
 
   def authorized
@@ -28,7 +38,11 @@ class QuickbooksTime
   end
 
   def auth_url
-    '#'
+    auth&.auth_url || '#'
+  end
+
+  def status
+    auth&.status || false
   end
 
   def status
