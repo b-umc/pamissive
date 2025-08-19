@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative '../missive/post_builder'
+require_relative '../missive/queue'
+
 class TimesheetsSyncer
   def initialize(qbt, repos, cursor)
     @stream = TimesheetStream.new(qbt_client: qbt, cursor_store: cursor, limit: Constants::QBT_PAGE_LIMIT)
@@ -12,7 +15,7 @@ class TimesheetsSyncer
       rows.each do |ts|
         changed = @ts_repo.upsert(ts)
         touched[ts['jobcode_id']] = true if changed
-        Missive::Queue.enqueue(Missive::PostBuilder.timesheet_event(ts)) if changed
+        QuickbooksTime::Missive::Queue.enqueue(QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)) if changed
       end
     end
     OverviewRefresher.rebuild_many(touched.keys) { done&.call(true) }
