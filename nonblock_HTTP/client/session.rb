@@ -14,7 +14,7 @@ class NonBlockHTTP::Client::ClientSession
     build_request(url, options, __callee__)
     @socket.on(:data, method(:handle_data))
     @socket.on(:disconnect, method(:handle_disconnect))
-    LOG.debug([:write_http, @request]) if @debug
+    # LOG.debug([:write_http, @request]) if @debug
     @socket.write(@request.to_s)
   end
 
