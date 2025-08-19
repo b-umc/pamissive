@@ -16,6 +16,7 @@ class NonBlockHTTP::Client::Response
     @working_chunks = [''.dup]
     @working_size = 0
     @working_length = nil
+    @buffer = ''.dup
     parse(data)
   end
 
@@ -80,23 +81,44 @@ class NonBlockHTTP::Client::Response
   end
 
   def parse_chunks(input_data)
-    data = input_data
+    data = @buffer + input_data.to_s
+    @buffer = ''.dup
 
-    while (data = split_chunk(data))
-      return final_chunk if @working_length.zero?
+    while data && !data.empty?
+      unless @working_length
+        data = split_chunk(data)
+        break unless data
+        return final_chunk if @working_length.zero?
+      end
 
+      remaining_length = @working_length - @working_chunk
       idx = @working_chunks.length - 1
-      @working_chunks[idx] = (@working_chunks[idx] + data).byteslice(0, @working_length)
-      break if @working_chunks[idx].length < @working_length
+      @working_chunks[idx] << data.byteslice(0, remaining_length)
 
-      data = next_chunk(data)
+      consumed = [data.bytesize, remaining_length].min
+      @working_chunk += consumed
+      if consumed < remaining_length
+        data = nil
+        break
+      end
+
+      if data.bytesize < remaining_length + 2
+        @buffer = data.byteslice(remaining_length..) || ''.dup
+        data = nil
+        break
+      end
+
+      data = next_chunk(data, remaining_length)
     end
+
+    @buffer << data if data && !data.empty?
   end
 
-  def next_chunk(data)
+  def next_chunk(data, consumed)
     @working_chunks << ''.dup
-    data = data.byteslice(@working_length + 2..)
+    data = data.byteslice(consumed + 2..)
     @working_length = nil
+    @working_chunk = 0
     data
   end
 
@@ -109,8 +131,14 @@ class NonBlockHTTP::Client::Response
     return unless data
     return data if @working_length
 
-    len, data = data.split("\r\n", 2)
-    @working_length = len&.to_i(16)
-    data
+    if (idx = data.index("\r\n"))
+      len = data.byteslice(0, idx)
+      @working_length = len.to_i(16)
+      @working_chunk = 0
+      data.byteslice(idx + 2..)
+    else
+      @buffer << data
+      nil
+    end
   end
 end
