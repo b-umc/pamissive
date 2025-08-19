@@ -9,10 +9,9 @@ class JobsSyncer
   end
 
   def run(&done)
-    @stream.each_batch do |rows|
-      rows.each { |j| @repo.upsert(j) }
+    @stream.each_batch(proc { |rows| rows.each { |j| @repo.upsert(j) } }) do |ok|
+      done&.call(ok)
     end
-    done&.call(true)
   rescue StandardError => e
     LOG.error [:jobs_sync_failed, e.message]
     done&.call(false)

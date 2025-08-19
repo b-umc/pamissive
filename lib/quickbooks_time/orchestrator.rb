@@ -31,7 +31,6 @@ class QuickbooksTime
           return on_fail(:timesheets) unless ok3
           QuickbooksTime::Missive::Dispatcher.start(queue, limiter)   # background drainer
           LOG.info [:quickbooks_time_sync_complete]
-
         end
       end
     end

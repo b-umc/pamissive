@@ -13,14 +13,19 @@ class TimesheetsSyncer
 
   def backfill_all(&done)
     touched = {}
-    @stream.each_batch do |rows|
+    @stream.each_batch(proc do |rows|
       rows.each do |ts|
         changed = @ts_repo.upsert(ts)
         touched[ts['jobcode_id']] = true if changed
         QuickbooksTime::Missive::Queue.enqueue(QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)) if changed
       end
+    end) do |ok|
+      if ok
+        OverviewRefresher.rebuild_many(touched.keys) { done&.call(true) }
+      else
+        done&.call(false)
+      end
     end
-    OverviewRefresher.rebuild_many(touched.keys) { done&.call(true) }
   rescue StandardError => e
     LOG.error [:timesheet_sync_failed, e.message]
     done&.call(false)
