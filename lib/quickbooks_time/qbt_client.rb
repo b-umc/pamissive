@@ -6,6 +6,7 @@ require_relative '../../nonblock_HTTP/manager'
 require_relative '../../logging/app_logger'
 LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 
+
 class QbtClient
   API_ENDPOINT = 'https://rest.tsheets.com/api/v1'
 
@@ -60,6 +61,7 @@ class QbtClient
         LOG.error [:qbt_api_request_failed, endpoint, response.code]
         return blk.call(nil)
       end
+
 
       begin
         blk.call(JSON.parse(response.body))
