@@ -45,6 +45,7 @@ class QbtClient
 
     headers = { 'Authorization' => "Bearer #{token}" }
     url = "#{API_ENDPOINT}/#{endpoint}"
+    LOG.debug [:qbt_api_request, url]
 
     NonBlockHTTP::Client::ClientSession.new.get(url, { headers: headers }, log_debug: true) do |response|
       unless response

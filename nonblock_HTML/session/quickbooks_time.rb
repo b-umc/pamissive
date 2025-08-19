@@ -8,7 +8,7 @@ class NonBlockHTML::Server::Session; end
 class NonBlockHTML::Server::Session::QuickbooksTime
   QBT_CONNECTED = %(<button class="button-link" disabled>QuickbooksTime Connected</button>)
 
-  QBT_DISCONNECTED = %(<button class="button" ws-send hx-vals='{"cat":"quickbooks_time", "cmd":"login"}'>QuickbooksTime Connect</button>)
+  QBT_DISCONNECTED = %(<button class="button" ws-send hx-vals='{"cat":"quickbooks_time", "act":"login"}'>QuickbooksTime Connect</button>)
 
   attr_reader :name, :opened
 
