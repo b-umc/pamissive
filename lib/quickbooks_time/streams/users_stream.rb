@@ -8,10 +8,12 @@ class UsersStream
 
   def each_batch(on_rows, page = 1, &done)
     @qbt.users(page: page, limit: @limit) do |resp|
-      return done&.call(false) unless resp
+      unless resp
+        done&.call(false)
+        next
+      end
 
       rows = resp.dig('results', 'users')&.values || []
-
       on_rows.call(rows) unless rows.empty?
 
       if resp['more'] && rows.any?

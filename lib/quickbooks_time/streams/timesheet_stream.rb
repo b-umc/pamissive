@@ -16,7 +16,10 @@ class TimesheetStream
 
   def fetch_batch(ts, id, on_rows, &done)
     @qbt.timesheets_modified_since(ts, after_id: id, limit: @limit, order: :asc, supplemental: true) do |resp|
-      return done&.call(false) unless resp
+      unless resp
+        done&.call(false)
+        next
+      end
 
       rows = sort_rows(resp)
       rows.reject! { |r| before_or_equal_cursor?(r, ts, id) }

@@ -8,7 +8,10 @@ class JobsStream
 
   def each_batch(on_rows, page = 1, &done)
     @qbt.jobcodes(page: page, limit: @limit) do |resp|
-      return done&.call(false) unless resp
+      unless resp
+        done&.call(false)
+        next
+      end
 
       rows = resp.dig('results', 'jobcodes')&.values || []
       on_rows.call(rows) unless rows.empty?

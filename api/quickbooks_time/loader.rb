@@ -18,7 +18,6 @@ require_relative 'auth_server'
 server = NonBlockHTTP::Manager.server(port: 8080)
 
 qbt    = QbtClient.new(-> { QBT.auth&.token&.access_token })
-
 repos  = OpenStruct.new(
   users:      UsersRepo.new,
   jobs:       JobsRepo.new,

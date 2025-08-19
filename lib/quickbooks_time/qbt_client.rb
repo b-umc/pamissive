@@ -6,7 +6,6 @@ require_relative '../../nonblock_HTTP/manager'
 require_relative '../../logging/app_logger'
 LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 
-
 class QbtClient
   API_ENDPOINT = 'https://rest.tsheets.com/api/v1'
 
@@ -50,18 +49,20 @@ class QbtClient
     NonBlockHTTP::Client::ClientSession.new.get(url, { headers: headers }, log_debug: true) do |response|
       unless response
         LOG.error [:qbt_api_request_failed, endpoint, :no_response]
-        return blk.call(nil)
+        blk.call(nil)
+        next
       end
 
       if response.code == 404 && endpoint.start_with?('timesheets')
-        return blk.call({ 'results' => { 'timesheets' => {} }, 'more' => false })
+        blk.call({ 'results' => { 'timesheets' => {} }, 'more' => false })
+        next
       end
 
       unless response.code == 200
         LOG.error [:qbt_api_request_failed, endpoint, response.code]
-        return blk.call(nil)
+        blk.call(nil)
+        next
       end
-
 
       begin
         blk.call(JSON.parse(response.body))
