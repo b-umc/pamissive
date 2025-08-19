@@ -177,8 +177,8 @@ class QuickbooksTime::AuthServer
     parse_token(response)
     TOK.store_token(@token) { |result| store_token_result(result) }
     LOG.debug('QuickbooksTime Token Aquired')
-    [200, POPUP_CLOSE]
     publish_token_state
+    [200, POPUP_CLOSE]
   end
 
   def store_token_result(result)
