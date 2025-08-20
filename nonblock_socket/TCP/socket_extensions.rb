@@ -22,25 +22,17 @@ module NonBlockSocket::TCP::SocketExtensions::SocketIO
 
   def read_chunk
     # LOG.debug(['reading'])
-    s = to_sock
-    dat = s.read_nonblock(CHUNK_LENGTH, exception: false)
+    dat = to_sock.read_nonblock(CHUNK_LENGTH, exception: false)
     return if dat == :wait_readable
-    p [:read, "...#{dat[-20,20]}"]
-    return on_disconnect if dat.nil? || dat.empty?
 
     handle_data(dat)
-    dat = nil
-    begin
-      on_disconnect if s.eof?
-    rescue IOError, Errno::EBADF
-      on_disconnect
-    end
   rescue EOFError, Errno::EPIPE, Errno::ECONNREFUSED, Errno::ECONNRESET => e
-    on_disconnect(dat)
-
+    handle_data(dat)
+    on_disconnect
     on_error(e, e.backtrace)
   rescue IOError, Errno::EBADF
-    on_disconnect(dat)
+    handle_data(dat)
+    on_disconnect
   rescue IO::WaitReadable
     # IO not ready yet
   end
@@ -102,9 +94,8 @@ module NonBlockSocket::TCP::SocketExtensions::Events
     trigger_event(:connect, self)
   end
 
-  def on_disconnect(dat = nil)
+  def on_disconnect
     @disconnected = true
-    on_data(dat) if dat
     remove_readable(to_io)
     remove_writable(to_io)
     close unless closed?
@@ -235,6 +226,10 @@ class NonBlockSocket::TCP::Wrapper
 
   def initialize(socket)
     @wait_io = false
+    @socket = socket
+    connected
+  end
+end
     @socket = socket
     connected
   end
