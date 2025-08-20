@@ -2,7 +2,7 @@
 
 require 'json'
 require 'uri'
-require_relative '../../nonblock_HTTP/manager'
+require_relative '../../nonblock_HTTP/client/session'
 require_relative '../../logging/app_logger'
 LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 
@@ -20,7 +20,7 @@ class QbtClient
       sort_order: order,
       supplemental_data: supplemental ? 'yes' : 'no'
     }
-    params[:after_id] = after_id if after_id
+    params[:after_id] = after_id if after_id && after_id > 0
     api_request("timesheets?#{URI.encode_www_form(params)}", &blk)
   end
 
@@ -60,7 +60,12 @@ class QbtClient
       end
 
       unless response.code == 200
-        LOG.error [:qbt_api_request_failed, endpoint, response.code]
+        error_body = begin
+          response.body
+        rescue StandardError
+          nil
+        end
+        LOG.error [:qbt_api_request_failed, endpoint, response.code, error_body].compact
         blk.call(nil)
         next
       end
