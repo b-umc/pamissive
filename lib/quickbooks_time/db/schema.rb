@@ -83,6 +83,12 @@ class QuickbooksTime
             last_id BIGINT
           );
         SQL
+
+        conn.exec(<<~SQL)
+          ALTER TABLE api_sync_logs
+            ADD COLUMN IF NOT EXISTS last_successful_sync TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS last_id BIGINT;
+        SQL
       end
 
       def ensure_timesheet_meta_columns(conn)

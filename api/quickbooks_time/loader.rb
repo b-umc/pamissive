@@ -38,7 +38,7 @@ repos           = OpenStruct.new(
   overview:   OverviewRepo.new,
   sync_log:   SyncLogRepo.new
 )
-cursor          = CursorStore.new(db: db_conn)
+cursor          = CursorStore.new(db: db_conn, full_resync: ENV['QBT_FULL_RESYNC'] == '1')
 queue           = QuickbooksTime::Missive::Queue
 missive_limiter = RateLimiter.new(interval: Constants::MISSIVE_POST_MIN_INTERVAL)
 
