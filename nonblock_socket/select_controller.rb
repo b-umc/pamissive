@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'timeout'
 require_relative '../logging/app_logger'
 require_relative 'event_bus'
 
@@ -62,13 +63,13 @@ module SelectHandlerMethods
   def handle_writable(writable)
     return unless writable.is_a?(Array)
 
-    writable.each { |sock| @writable[sock]&.call }
+    writable.each { |sock| call_with_timeout(@writable[sock]) if @writable[sock] }
   end
 
   def handle_readable(readable)
     return unless readable.is_a?(Array)
 
-    readable.each { |sock| @readable[sock]&.call }
+    readable.each { |sock| call_with_timeout(@readable[sock]) if @readable[sock] }
   end
 
   def handle_timeouts
@@ -80,13 +81,14 @@ module SelectHandlerMethods
       next unless current_time >= timeout
 
       @timeouts.delete(callback_proc)
-      callback_proc.call
+      call_with_timeout(callback_proc)
     end
   end
 end
 
 class SelectController
   MAX_SOCKS = 50
+  CALL_TIMEOUT = 0.5
   @instance = nil
   class << self
     def instance
@@ -180,6 +182,12 @@ class SelectController
   end
 
   private
+
+  def call_with_timeout(callback_proc)
+    Timeout.timeout(CALL_TIMEOUT) { callback_proc.call }
+  rescue Timeout::Error => e
+    raise Timeout::Error, "callback exceeded #{CALL_TIMEOUT} seconds", e.backtrace
+  end
 
   def readables
     @readable.delete_if { |socket, _| socket.closed? }
