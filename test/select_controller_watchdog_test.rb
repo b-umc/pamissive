@@ -22,8 +22,8 @@ class SelectControllerWatchdogTest < Minitest::Test
     Object.send(:remove_const, :LOG)
     Object.const_set(:LOG, fake_log)
 
-    @controller.instance_variable_set(:@last_activity, Time.now - (SelectController::STALL_TIMEOUT * 2))
-    sleep SelectController::STALL_TIMEOUT * 2
+    @controller.instance_variable_set(:@last_activity, Time.now - (SelectController::CALL_TIMEOUT * 2))
+    sleep SelectController::CALL_TIMEOUT * 2
 
     assert messages.any? { |msg| msg[0] == :select_blocked }
   ensure
