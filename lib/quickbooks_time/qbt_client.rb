@@ -3,14 +3,17 @@
 require 'json'
 require 'uri'
 require_relative '../../nonblock_HTTP/client/session'
+require_relative 'rate_limiter'
+require_relative 'util/constants'
 require_relative '../../logging/app_logger'
 LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 
 class QbtClient
   API_ENDPOINT = 'https://rest.tsheets.com/api/v1'
 
-  def initialize(auth_token_provider = nil)
+  def initialize(auth_token_provider = nil, limiter: RateLimiter.new(interval: Constants::QBT_RATE_INTERVAL))
     @token_provider = auth_token_provider
+    @limiter = limiter
   end
 
   def timesheets_modified_since(timestamp_iso, page: 1, limit: 50, supplemental: true, &blk)
@@ -47,7 +50,8 @@ class QbtClient
     url = "#{API_ENDPOINT}/#{endpoint}"
     LOG.debug [:qbt_api_request, url]
 
-    NonBlockHTTP::Client::ClientSession.new.get(url, { headers: headers }, log_debug: true) do |response|
+    @limiter.wait_until_allowed do
+      NonBlockHTTP::Client::ClientSession.new.get(url, { headers: headers }, log_debug: true) do |response|
       unless response
         LOG.error [:qbt_api_request_failed, endpoint, :no_response]
         blk.call(nil)
@@ -78,6 +82,7 @@ class QbtClient
       rescue JSON::ParserError
         LOG.error [:qbt_api_response_parse_error, endpoint]
         blk.call(nil)
+      end
       end
     end
   end

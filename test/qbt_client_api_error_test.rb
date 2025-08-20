@@ -16,7 +16,8 @@ class QbtClientApiErrorTest < Minitest::Test
 
   def test_api_request_logs_body_for_error
     token_provider = -> { 'token' }
-    client = QbtClient.new(token_provider)
+    limiter = Class.new { def wait_until_allowed(&blk); blk.call; end }.new
+    client = QbtClient.new(token_provider, limiter: limiter)
     response = StubResponse.new(417, '{"error":"fail"}')
     messages = []
 
@@ -39,7 +40,8 @@ class QbtClientApiErrorTest < Minitest::Test
 
   def test_timesheets_uses_supported_params
     token_provider = -> { 'token' }
-    client = QbtClient.new(token_provider)
+    limiter = Class.new { def wait_until_allowed(&blk); blk.call; end }.new
+    client = QbtClient.new(token_provider, limiter: limiter)
     session = CaptureSession.new
 
     NonBlockHTTP::Client::ClientSession.stub :new, session do

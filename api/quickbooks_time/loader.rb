@@ -17,24 +17,25 @@ require_relative '../../nonblock_HTTP/manager'
 require_relative 'auth_server'
 server = NonBlockHTTP::Manager.server(port: 8080)
 
-qbt    = QbtClient.new(-> { QBT.auth&.token&.access_token })
-repos  = OpenStruct.new(
+qbt_limiter     = RateLimiter.new(interval: Constants::QBT_RATE_INTERVAL)
+qbt             = QbtClient.new(-> { QBT.auth&.token&.access_token }, limiter: qbt_limiter)
+repos           = OpenStruct.new(
   users:      UsersRepo.new,
   jobs:       JobsRepo.new,
   timesheets: TimesheetsRepo.new,
   overview:   OverviewRepo.new,
   sync_log:   SyncLogRepo.new
 )
-cursor  = CursorStore.new
-queue   = QuickbooksTime::Missive::Queue
-limiter = RateLimiter.new(interval: Constants::MISSIVE_POST_MIN_INTERVAL)
+cursor          = CursorStore.new
+queue           = QuickbooksTime::Missive::Queue
+missive_limiter = RateLimiter.new(interval: Constants::MISSIVE_POST_MIN_INTERVAL)
 
 QBT = QuickbooksTime.new(
   qbt: qbt,
   repos: repos,
   cursor: cursor,
   queue: queue,
-  limiter: limiter
+  limiter: missive_limiter
 ) unless defined?(QBT)
 auth = QuickbooksTime::AuthServer.new(server, proc { |srv| QBT.auth = srv })
 QBT.auth ||= auth
