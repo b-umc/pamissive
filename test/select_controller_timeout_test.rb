@@ -23,9 +23,10 @@ class SelectControllerTimeoutTest < Minitest::Test
     SelectController.instance.add_sock(blocking, reader)
     writer.write('hi')
 
-    assert_raises(Timeout::Error) do
+    err = assert_raises(Timeout::Error) do
       SelectController.instance.send(:select_socks)
     end
+    assert_includes err.message, blocking.source_location.join(':')
   ensure
     reader.close
     writer.close

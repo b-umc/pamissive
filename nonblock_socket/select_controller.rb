@@ -186,7 +186,15 @@ class SelectController
   def call_with_timeout(callback_proc)
     Timeout.timeout(CALL_TIMEOUT) { callback_proc.call }
   rescue Timeout::Error => e
-    raise Timeout::Error, "callback exceeded #{CALL_TIMEOUT} seconds", e.backtrace
+    desc = if callback_proc.respond_to?(:source_location) && callback_proc.source_location
+             file, line = callback_proc.source_location
+             "#{file}:#{line}"
+           elsif callback_proc.respond_to?(:receiver) && callback_proc.respond_to?(:name)
+             "#{callback_proc.receiver.class}##{callback_proc.name}"
+           else
+             callback_proc.inspect
+           end
+    raise Timeout::Error, "callback #{desc} exceeded #{CALL_TIMEOUT} seconds", e.backtrace
   end
 
   def readables
