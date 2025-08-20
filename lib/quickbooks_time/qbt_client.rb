@@ -71,8 +71,12 @@ class QbtClient
       end
 
       begin
-        blk.call(JSON.parse(response.body))
+        data = JSON.parse(response.body)
+        size = data.dig('results', 'jobcodes')&.size || data.dig('results', 'timesheets')&.size
+        LOG.debug [:qbt_api_response, endpoint, :more, data['more'], :count, size]
+        blk.call(data)
       rescue JSON::ParserError
+        LOG.error [:qbt_api_response_parse_error, endpoint]
         blk.call(nil)
       end
     end

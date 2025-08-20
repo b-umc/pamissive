@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative '../../../logging/app_logger'
+LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
+
 class TimesheetStream
   def initialize(qbt_client:, cursor_store:, limit:)
     @qbt = qbt_client
@@ -23,6 +26,7 @@ class TimesheetStream
 
       rows = sort_rows(resp)
       rows.reject! { |r| before_or_equal_cursor?(r, ts, id) }
+      LOG.debug [:timesheets_page, page, :count, rows.size, :more, resp['more']]
       on_rows.call(rows) if rows.any?
 
       last_row = rows.last || last_row
@@ -33,6 +37,7 @@ class TimesheetStream
         if last_row
           @cursor.write(last_row['last_modified'], last_row['id'])
         end
+        LOG.debug [:timesheets_sync_complete]
         done&.call(true)
       end
     end
