@@ -37,15 +37,21 @@ class QbtClientApiErrorTest < Minitest::Test
     end
   end
 
-  def test_timesheets_drops_zero_after_id
+  def test_timesheets_uses_supported_params
     token_provider = -> { 'token' }
     client = QbtClient.new(token_provider)
     session = CaptureSession.new
 
     NonBlockHTTP::Client::ClientSession.stub :new, session do
-      client.timesheets_modified_since('1970-01-01T00:00:00Z', after_id: 0) { |_| }
+      client.timesheets_modified_since('1970-01-01T00:00:00Z', page: 2, limit: 100, supplemental: true) { |_| }
     end
 
-    refute_includes session.url, 'after_id=0'
+    assert_match %r{timesheets\?}, session.url
+    assert_includes session.url, 'modified_since=1970-01-01T00%3A00%3A00Z'
+    assert_includes session.url, 'page=2'
+    assert_includes session.url, 'limit=100'
+    assert_includes session.url, 'supplemental_data=yes'
+    refute_includes session.url, 'after_id'
+    refute_includes session.url, 'sort_order'
   end
 end

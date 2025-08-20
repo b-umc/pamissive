@@ -13,14 +13,13 @@ class QbtClient
     @token_provider = auth_token_provider
   end
 
-  def timesheets_modified_since(timestamp_iso, after_id: nil, limit: 50, order: :asc, supplemental: false, &blk)
+  def timesheets_modified_since(timestamp_iso, page: 1, limit: 50, supplemental: true, &blk)
     params = {
       modified_since: timestamp_iso,
       limit: limit,
-      sort_order: order,
-      supplemental_data: supplemental ? 'yes' : 'no'
+      page: page
     }
-    params[:after_id] = after_id if after_id && after_id > 0
+    params[:supplemental_data] = supplemental ? 'yes' : 'no'
     api_request("timesheets?#{URI.encode_www_form(params)}", &blk)
   end
 

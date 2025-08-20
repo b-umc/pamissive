@@ -9,13 +9,13 @@ class TimesheetStream
 
   def each_batch(on_rows, &done)
     ts, id = @cursor.read
-    fetch_batch(ts, id, on_rows, &done)
+    fetch_page(ts, id, 1, on_rows, nil, &done)
   end
 
   private
 
-  def fetch_batch(ts, id, on_rows, &done)
-    @qbt.timesheets_modified_since(ts, after_id: id, limit: @limit, order: :asc, supplemental: true) do |resp|
+  def fetch_page(ts, id, page, on_rows, last_row, &done)
+    @qbt.timesheets_modified_since(ts, page: page, limit: @limit, supplemental: true) do |resp|
       unless resp
         done&.call(false)
         next
@@ -25,12 +25,14 @@ class TimesheetStream
       rows.reject! { |r| before_or_equal_cursor?(r, ts, id) }
       on_rows.call(rows) if rows.any?
 
-      if resp['more'] && rows.any?
-        last = rows.last
-        @cursor.write(last['last_modified'], last['id'])
-        ts_new, id_new = @cursor.read
-        fetch_batch(ts_new, id_new, on_rows, &done)
+      last_row = rows.last || last_row
+
+      if resp['more']
+        fetch_page(ts, id, page + 1, on_rows, last_row, &done)
       else
+        if last_row
+          @cursor.write(last_row['last_modified'], last_row['id'])
+        end
         done&.call(true)
       end
     end
