@@ -69,6 +69,7 @@ class QuickbooksTime
             billed BOOLEAN NOT NULL DEFAULT false,
             billed_invoice_id TEXT,
             entry_type TEXT,
+            missive_post_id TEXT,
             start_time TIMESTAMPTZ,
             end_time TIMESTAMPTZ,
             created_qbt TIMESTAMPTZ,
@@ -106,6 +107,7 @@ class QuickbooksTime
         conn.exec(<<~SQL)
           ALTER TABLE quickbooks_time_timesheets
             ADD COLUMN IF NOT EXISTS entry_type TEXT,
+            ADD COLUMN IF NOT EXISTS missive_post_id TEXT,
             ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ,
             ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ,
             ADD COLUMN IF NOT EXISTS created_qbt TIMESTAMPTZ,

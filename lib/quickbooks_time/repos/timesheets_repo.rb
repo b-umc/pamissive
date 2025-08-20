@@ -7,6 +7,7 @@ class TimesheetsRepo
     @db = db
   end
 
+  # Inserts or updates a timesheet. Returns [changed, previous_post_id].
   def upsert(ts)
     id        = ts['id'] || ts[:id]
     job_id    = ts['jobcode_id'] || ts[:jobcode_id]
@@ -26,17 +27,18 @@ class TimesheetsRepo
     modified  = nil if modified.nil? || modified == ''
 
     hash = Digest::SHA1.hexdigest([user_id, date, secs, notes, entry, start_t, end_t].join('|'))
-    res = @db.exec_params('SELECT last_hash FROM quickbooks_time_timesheets WHERE id=$1', [id])
+    res = @db.exec_params('SELECT last_hash, missive_post_id FROM quickbooks_time_timesheets WHERE id=$1', [id])
     if res.ntuples.zero?
       @db.exec_params(
         'INSERT INTO quickbooks_time_timesheets (
            id, quickbooks_time_jobsite_id, user_id, date, duration_seconds,
-           notes, last_hash, entry_type, start_time, end_time, created_qbt, modified_qbt)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
-        [id, job_id, user_id, date, secs, notes, hash, entry, start_t, end_t, created, modified]
+           notes, last_hash, entry_type, missive_post_id, start_time, end_time, created_qbt, modified_qbt)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
+        [id, job_id, user_id, date, secs, notes, hash, entry, nil, start_t, end_t, created, modified]
       )
-      true
+      [true, nil]
     elsif res[0]['last_hash'] != hash
+      old_post_id = res[0]['missive_post_id']
       @db.exec_params(
         'UPDATE quickbooks_time_timesheets
            SET quickbooks_time_jobsite_id=$1, user_id=$2, date=$3,
@@ -46,9 +48,14 @@ class TimesheetsRepo
          WHERE id=$12',
         [job_id, user_id, date, secs, notes, hash, entry, start_t, end_t, created, modified, id]
       )
-      true
+      [true, old_post_id]
     else
-      false
+      [false, nil]
     end
   end
+
+  def save_post_id(id, post_id)
+    @db.exec_params('UPDATE quickbooks_time_timesheets SET missive_post_id=$1, updated_at=now() WHERE id=$2', [post_id, id])
+  end
 end
+

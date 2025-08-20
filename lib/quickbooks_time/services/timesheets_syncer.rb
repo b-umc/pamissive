@@ -14,10 +14,15 @@ class TimesheetsSyncer
   def backfill_all(&done)
     touched = {}
     @stream.each_batch(proc do |rows|
+      rows.sort_by! { |ts| QuickbooksTime::Missive::PostBuilder.compute_times(ts).last || Time.at(0) }
       rows.each do |ts|
-        changed = @ts_repo.upsert(ts)
-        touched[ts['jobcode_id']] = true if changed
-        QuickbooksTime::Missive::Queue.enqueue(QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)) if changed
+        changed, old_post_id = @ts_repo.upsert(ts)
+        next unless changed
+
+        touched[ts['jobcode_id']] = true
+        QuickbooksTime::Missive::Queue.enqueue_delete(old_post_id) if old_post_id
+        payload = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+        QuickbooksTime::Missive::Queue.enqueue_post(payload, timesheet_id: ts['id'])
       end
     end) do |ok|
       if ok

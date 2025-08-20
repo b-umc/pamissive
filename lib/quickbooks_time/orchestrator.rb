@@ -29,7 +29,7 @@ class QuickbooksTime
           if ok2
             TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |ok3|
               if ok3
-                QuickbooksTime::Missive::Dispatcher.start(queue, limiter)   # background drainer
+                QuickbooksTime::Missive::Dispatcher.start(queue, limiter, repos.timesheets)   # background drainer
                 LOG.info [:quickbooks_time_sync_complete]
               else
                 on_fail(:timesheets)
