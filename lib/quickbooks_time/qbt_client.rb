@@ -15,6 +15,7 @@ class QbtClient
 
   def timesheets_modified_since(timestamp_iso, page: 1, limit: 50, supplemental: true, &blk)
     params = {
+      start_date: timestamp_iso.to_s[0, 10],
       modified_since: timestamp_iso,
       limit: limit,
       page: page

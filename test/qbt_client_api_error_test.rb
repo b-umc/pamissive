@@ -47,6 +47,7 @@ class QbtClientApiErrorTest < Minitest::Test
     end
 
     assert_match %r{timesheets\?}, session.url
+    assert_includes session.url, 'start_date=1970-01-01'
     assert_includes session.url, 'modified_since=1970-01-01T00%3A00%3A00Z'
     assert_includes session.url, 'page=2'
     assert_includes session.url, 'limit=100'
