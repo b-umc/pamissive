@@ -230,7 +230,3 @@ class NonBlockSocket::TCP::Wrapper
     connected
   end
 end
-    @socket = socket
-    connected
-  end
-end
