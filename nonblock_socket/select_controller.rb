@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'timeout'
 require_relative '../logging/app_logger'
 require_relative 'event_bus'
 
@@ -63,13 +62,13 @@ module SelectHandlerMethods
   def handle_writable(writable)
     return unless writable.is_a?(Array)
 
-    writable.each { |sock| call_with_timeout(@writable[sock]) if @writable[sock] }
+    writable.each { |sock| @writable[sock]&.call }
   end
 
   def handle_readable(readable)
     return unless readable.is_a?(Array)
 
-    readable.each { |sock| call_with_timeout(@readable[sock]) if @readable[sock] }
+    readable.each { |sock| @readable[sock]&.call }
   end
 
   def handle_timeouts
@@ -81,14 +80,14 @@ module SelectHandlerMethods
       next unless current_time >= timeout
 
       @timeouts.delete(callback_proc)
-      call_with_timeout(callback_proc)
+      callback_proc.call
     end
   end
 end
 
 class SelectController
   MAX_SOCKS = 50
-  CALL_TIMEOUT = 0.5
+  STALL_TIMEOUT = 0.5
   WATCHDOG_INTERVAL = 0.25
   @instance = nil
   class << self
@@ -187,20 +186,6 @@ class SelectController
 
   private
 
-  def call_with_timeout(callback_proc)
-    Timeout.timeout(CALL_TIMEOUT) { callback_proc.call }
-  rescue Timeout::Error => e
-    desc = if callback_proc.respond_to?(:source_location) && callback_proc.source_location
-             file, line = callback_proc.source_location
-             "#{file}:#{line}"
-           elsif callback_proc.respond_to?(:receiver) && callback_proc.respond_to?(:name)
-             "#{callback_proc.receiver.class}##{callback_proc.name}"
-           else
-             callback_proc.inspect
-           end
-    raise Timeout::Error, "callback #{desc} exceeded #{CALL_TIMEOUT} seconds", e.backtrace
-  end
-
   def readables
     @readable.delete_if { |socket, _| socket.closed? }
     @readable.keys
@@ -248,7 +233,7 @@ class SelectController
     @watchdog = Thread.new do
       loop do
         sleep WATCHDOG_INTERVAL
-        next unless Time.now - @last_activity > CALL_TIMEOUT
+        next unless Time.now - @last_activity > STALL_TIMEOUT
         trace = @select_thread.backtrace
         LOG.error([:select_blocked, trace])
       end
