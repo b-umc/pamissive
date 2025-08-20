@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative '../util/constants'
+require_relative '../util/format'
+
 # Placeholder helpers used by PostBuilder
 class QuickbooksTime
   module Missive
@@ -36,7 +39,7 @@ class QuickbooksTime
             username: 'QuickBooks Time',
             conversation_subject: "QuickBooks Time: #{JobName.lookup(ts['jobcode_id'])}",
             notification: { title: "Timesheet • #{UserName.lookup(ts['user_id'])}",
-                            body: Util::Format.notif_from_md(md) },
+                            body: ::Util::Format.notif_from_md(md) },
             attachments: [{ markdown: md, timestamp: Time.now.to_i, color: Colors.for(ts) }],
             add_to_inbox: false, add_to_team_inbox: false
           }
@@ -50,7 +53,7 @@ class QuickbooksTime
             username: 'Overview',
             conversation_subject: "QuickBooks Time: #{JobName.lookup(job_id)}",
             notification: { title: "QBT Overview • #{JobName.lookup(job_id)}",
-                            body: Util::Format.notif_from_md(md, 180) },
+                            body: ::Util::Format.notif_from_md(md, 180) },
             attachments: [{ markdown: md, timestamp: Time.now.to_i, color: status_color }],
             add_to_inbox: false, add_to_team_inbox: false
           }
