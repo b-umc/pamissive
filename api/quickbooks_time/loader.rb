@@ -27,7 +27,8 @@ db_conn = PG.connect(
   host: 'localhost'
 )
 
-QuickbooksTime::DB::Schema.ensure!(db_conn)
+rebuild_timesheets = ENV['QBT_REBUILD_TIMESHEETS'] == '1'
+QuickbooksTime::DB::Schema.ensure!(db_conn, rebuild_timesheets: rebuild_timesheets)
 
 qbt_limiter     = RateLimiter.new(interval: Constants::QBT_RATE_INTERVAL)
 qbt             = QbtClient.new(-> { QBT.auth&.token&.access_token }, limiter: qbt_limiter)
@@ -38,7 +39,8 @@ repos           = OpenStruct.new(
   overview:   OverviewRepo.new,
   sync_log:   SyncLogRepo.new
 )
-cursor          = CursorStore.new(db: db_conn, full_resync: ENV['QBT_FULL_RESYNC'] == '1')
+full_resync = ENV['QBT_FULL_RESYNC'] == '1' || rebuild_timesheets
+cursor          = CursorStore.new(db: db_conn, full_resync: full_resync)
 queue           = QuickbooksTime::Missive::Queue
 missive_limiter = RateLimiter.new(interval: Constants::MISSIVE_POST_MIN_INTERVAL)
 

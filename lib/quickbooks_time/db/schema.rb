@@ -5,13 +5,18 @@ class QuickbooksTime
     module Schema
       module_function
 
-      def ensure!(conn)
+      def ensure!(conn, rebuild_timesheets: false)
         create_users(conn)
         create_jobs(conn)
-        create_timesheets(conn)
         create_sync_logs(conn)
-        ensure_timesheet_meta_columns(conn)
-        create_timesheet_index(conn)
+
+        if rebuild_timesheets
+          rebuild_timesheets!(conn)
+        else
+          create_timesheets(conn)
+          ensure_timesheet_meta_columns(conn)
+          create_timesheet_index(conn)
+        end
       end
 
       def create_users(conn)
@@ -72,6 +77,12 @@ class QuickbooksTime
             updated_at TIMESTAMPTZ DEFAULT now()
           );
         SQL
+      end
+
+      def rebuild_timesheets!(conn)
+        conn.exec('DROP TABLE IF EXISTS quickbooks_time_timesheets;')
+        create_timesheets(conn)
+        create_timesheet_index(conn)
       end
 
       def create_sync_logs(conn)
