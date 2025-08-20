@@ -28,13 +28,17 @@ module NonBlockSocket::TCP::SocketExtensions::SocketIO
     return on_disconnect if dat.nil? || dat.empty?
 
     handle_data(dat)
-    on_disconnect if s.eof?
+    dat = nil
+    begin
+      on_disconnect if s.eof?
+    rescue IOError
+      on_disconnect
+    end
   rescue EOFError, Errno::EPIPE, Errno::ECONNREFUSED, Errno::ECONNRESET => e
-    # LOG.debug([:read_chunk_error, :read, dat.to_s.length, e])
-    LOG.debug('eof')
-    handle_data(dat) if dat && !dat.empty?
-    on_disconnect
+    on_disconnect(dat)
     on_error(e, e.backtrace)
+  rescue IOError
+    on_disconnect(dat)
   rescue IO::WaitReadable
     # IO not ready yet
   end
