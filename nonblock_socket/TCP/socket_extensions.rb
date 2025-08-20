@@ -25,6 +25,7 @@ module NonBlockSocket::TCP::SocketExtensions::SocketIO
     s = to_sock
     dat = s.read_nonblock(CHUNK_LENGTH, exception: false)
     return if dat == :wait_readable
+    p [:read, "...#{dat[-20,20]}"]
     return on_disconnect if dat.nil? || dat.empty?
 
     handle_data(dat)
@@ -36,6 +37,7 @@ module NonBlockSocket::TCP::SocketExtensions::SocketIO
     end
   rescue EOFError, Errno::EPIPE, Errno::ECONNREFUSED, Errno::ECONNRESET => e
     on_disconnect(dat)
+
     on_error(e, e.backtrace)
   rescue IOError, Errno::EBADF
     on_disconnect(dat)
