@@ -16,7 +16,7 @@ class JobsStream
       rows = resp.dig('results', 'jobcodes')&.values || []
       on_rows.call(rows) unless rows.empty?
 
-      if resp['more'] && rows.any?
+      if resp['more']
         each_batch(on_rows, page + 1, &done)
       else
         done&.call(true)
