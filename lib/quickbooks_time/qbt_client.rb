@@ -28,7 +28,7 @@ class QbtClient
   end
 
   def users(page:, limit:, &blk)
-    params = { page: page, per_page: limit, active: both }
+    params = { page: page, per_page: limit, active: 'both' }
     api_request("users?#{URI.encode_www_form(params)}", &blk)
   end
 
