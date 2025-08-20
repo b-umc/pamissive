@@ -88,7 +88,7 @@ end
 
 class SelectController
   MAX_SOCKS = 50
-  CALL_TIMEOUT = 0.5
+  CALL_TIMEOUT = 2
   @instance = nil
   class << self
     def instance

@@ -9,8 +9,12 @@ class EventHandler
   end
 
   def handle_timesheet_event(ts)
-    changed = @ts_repo.upsert(ts)
-    QuickbooksTime::Missive::Queue.enqueue(QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)) if changed
+    changed, old_post_id = @ts_repo.upsert(ts)
+    if changed
+      QuickbooksTime::Missive::Queue.enqueue_delete(old_post_id)
+      payload = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+      QuickbooksTime::Missive::Queue.enqueue_post(payload, timesheet_id: ts['id'])
+    end
     changed
   end
 end
