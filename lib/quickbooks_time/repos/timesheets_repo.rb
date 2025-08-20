@@ -20,6 +20,11 @@ class TimesheetsRepo
     created   = ts['created'] || ts[:created]
     modified  = ts['last_modified'] || ts[:last_modified]
 
+    start_t   = nil if start_t.nil? || start_t == ''
+    end_t     = nil if end_t.nil? || end_t == ''
+    created   = nil if created.nil? || created == ''
+    modified  = nil if modified.nil? || modified == ''
+
     hash = Digest::SHA1.hexdigest([user_id, date, secs, notes, entry, start_t, end_t].join('|'))
     res = @db.exec_params('SELECT last_hash FROM quickbooks_time_timesheets WHERE id=$1', [id])
     if res.ntuples.zero?
