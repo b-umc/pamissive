@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module QuickbooksTime
+class QuickbooksTime
   module DB
     module Schema
       module_function
