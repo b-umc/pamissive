@@ -89,7 +89,6 @@ end
 class SelectController
   MAX_SOCKS = 50
   CALL_TIMEOUT = 0.5
-  WATCHDOG_INTERVAL = 0.25
   @instance = nil
   class << self
     def instance
@@ -105,9 +104,6 @@ class SelectController
   include SelectHandlerMethods
 
   def initialize
-    @last_activity = Time.now
-    @select_thread = Thread.current
-    start_watchdog
     reset
   end
 
@@ -226,7 +222,6 @@ class SelectController
   end
 
   def select_socks
-    @last_activity = Time.now
     # LOG.debug @readable
     readable, writable, err = run_select
     # LOG.debug readable
@@ -242,17 +237,6 @@ class SelectController
     return nil if @timeouts.empty?
 
     [@timeouts.values.min, tnow].max - tnow
-  end
-
-  def start_watchdog
-    @watchdog = Thread.new do
-      loop do
-        sleep WATCHDOG_INTERVAL
-        next unless Time.now - @last_activity > CALL_TIMEOUT
-        trace = @select_thread.backtrace
-        LOG.error([:select_blocked, trace])
-      end
-    end
   end
 end
 
