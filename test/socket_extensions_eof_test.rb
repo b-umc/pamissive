@@ -27,7 +27,8 @@ class SocketExtensionsEOFTest < Minitest::Test
 
     handlers = {
       message: MessagePattern.new(proc { |msg, _client| events << [:message, msg] }),
-      disconnect: ->(_client) { events << [:disconnect] }
+      disconnect: ->(_client) { events << [:disconnect] },
+      error: ->(err, _client) { events << [:error, err] }
     }
 
     client = NonBlockSocket::TCP::Client.new('127.0.0.1', port, handlers: handlers)
@@ -43,5 +44,6 @@ class SocketExtensionsEOFTest < Minitest::Test
 
     assert_equal [:message, :disconnect], events.map(&:first)
     assert_equal "hi\n", events.find { |e| e.first == :message }[1]
+    refute events.any? { |e| e.first == :error }
   end
 end

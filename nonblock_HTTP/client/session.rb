@@ -51,11 +51,13 @@ class NonBlockHTTP::Client::ClientSession
     @response.parse(message_data)
     return unless @response.completed
 
+    @dc_called = true
     sock.close if @response.close?
-    @callback.call(@response) unless @dc_called
+    @callback.call(@response)
   end
 
   def handle_disconnect(_sock)
+    return if @dc_called
     # sock.close
     @dc_called = true
     @callback.call(@response)
