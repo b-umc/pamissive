@@ -66,8 +66,11 @@ class QbtClient
       end
 
       begin
+
+        p [:handling, "from_body...#{response.body[-20, 20]}"]
         blk.call(JSON.parse(response.body))
       rescue JSON::ParserError
+        p :bad_json
         blk.call(nil)
       end
     end
