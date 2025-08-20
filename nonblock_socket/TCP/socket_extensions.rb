@@ -31,13 +31,13 @@ module NonBlockSocket::TCP::SocketExtensions::SocketIO
     dat = nil
     begin
       on_disconnect if s.eof?
-    rescue IOError
+    rescue IOError, Errno::EBADF
       on_disconnect
     end
   rescue EOFError, Errno::EPIPE, Errno::ECONNREFUSED, Errno::ECONNRESET => e
     on_disconnect(dat)
     on_error(e, e.backtrace)
-  rescue IOError
+  rescue IOError, Errno::EBADF
     on_disconnect(dat)
   rescue IO::WaitReadable
     # IO not ready yet
