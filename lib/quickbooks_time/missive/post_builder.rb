@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'time'
 require_relative '../util/constants'
 require_relative '../util/format'
 
@@ -8,7 +9,21 @@ class QuickbooksTime
   module Missive
     module Templates
       def self.timesheet_markdown(ts)
-        "Timesheet #{ts['id']}"
+        start_t, end_t = PostBuilder.compute_times(ts)
+        user = UserName.lookup(ts['user_id'])
+        job  = JobName.lookup(ts['jobcode_id'])
+        duration_hours = (ts['duration'] || ts[:duration] || ts['duration_seconds'] || 0).to_i / 3600.0
+        flags = []
+        flags << 'manual' if (ts['type'] || ts[:type] || ts['entry_type'])&.downcase == 'manual'
+        flags << 'over 8h' if duration_hours > 8
+        flag_str = flags.empty? ? '' : " **[#{flags.join(', ')}]**"
+        lines = ["#{user} • #{job}#{flag_str}"]
+        lines << "Start: #{start_t.utc.strftime('%Y-%m-%d %H:%M')}" if start_t
+        lines << "End: #{end_t.utc.strftime('%Y-%m-%d %H:%M')}" if end_t
+        lines << "Duration: #{format('%.2f', duration_hours)}h"
+        notes = ts['notes'] || ts[:notes]
+        lines << "Notes: #{notes}" if notes && !notes.strip.empty?
+        lines.join("\n")
       end
     end
 
@@ -25,17 +40,42 @@ class QuickbooksTime
     end
 
     module Colors
-      def self.for(_ts)
+      def self.for(ts)
+        duration = (ts['duration'] || ts[:duration] || ts['duration_seconds'] || 0).to_i
+        return Constants::STATUS_COLORS['expired'] if (ts['type'] || ts[:type] || ts['entry_type'])&.downcase == 'manual'
+        return Constants::STATUS_COLORS['overdue'] if duration > 28_800 # 8h
         Constants::STATUS_COLORS['unknown']
       end
     end
 
     module PostBuilder
+      def self.compute_times(ts)
+        secs    = (ts['duration'] || ts[:duration] || ts['duration_seconds'] || 0).to_i
+        entry   = (ts['type'] || ts[:type] || ts['entry_type']).to_s.downcase
+        start_s = ts['start'] || ts[:start] || ts['start_time'] || ts[:start_time]
+        end_s   = ts['end'] || ts[:end] || ts['end_time'] || ts[:end_time]
+        date    = ts['date'] || ts[:date]
+
+        if (start_s.nil? || start_s.empty?) && entry == 'manual' && date
+          start_s = "#{date}T09:30:00Z"
+        end
+
+        start_t = Time.parse(start_s) rescue nil
+        end_t   = if end_s && !end_s.empty?
+                    Time.parse(end_s) rescue nil
+                  elsif start_t
+                    start_t + secs
+                  elsif date
+                    Time.parse("#{date}T09:30:00Z") + secs rescue nil
+                  end
+        [start_t, end_t]
+      end
+
       def self.timesheet_event(ts)
         md = Templates.timesheet_markdown(ts)
         {
           posts: {
-            references: ["qbt:job:#{ts['jobcode_id']}"],
+            references: ["qbt:job:#{ts['jobcode_id']}", "qbt:timesheet:#{ts['id']}", "qbt:user:#{ts['user_id']}"] ,
             username: 'QuickBooks Time',
             conversation_subject: "QuickBooks Time: #{JobName.lookup(ts['jobcode_id'])}",
             notification: { title: "Timesheet • #{UserName.lookup(ts['user_id'])}",

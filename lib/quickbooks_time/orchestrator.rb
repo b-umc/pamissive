@@ -1,11 +1,16 @@
 require_relative 'services/users_syncer'
 require_relative 'services/jobs_syncer'
 require_relative 'services/timesheets_syncer'
+require_relative 'services/missive_backfiller'
 require_relative 'missive/dispatcher'
+require_relative 'util/constants'
+require_relative '../../nonblock_socket/select_controller'
 
 class QuickbooksTime
   attr_reader :qbt, :repos, :cursor, :queue, :limiter
   attr_accessor :auth
+
+  POLL_INTERVAL = Constants::QBT_POLL_INTERVAL
 
   def initialize(qbt:, repos:, cursor:, queue:, limiter:, auth: nil)
     @qbt = qbt
@@ -29,7 +34,9 @@ class QuickbooksTime
           if ok2
             TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |ok3|
               if ok3
-                QuickbooksTime::Missive::Dispatcher.start(queue, limiter)   # background drainer
+                MissiveBackfiller.new(repos.timesheets, Constants::MISSIVE_BACKFILL_MONTHS).run
+                QuickbooksTime::Missive::Dispatcher.start(queue, limiter, repos.timesheets)
+                schedule_poll
                 LOG.info [:quickbooks_time_sync_complete]
               else
                 on_fail(:timesheets)
@@ -57,5 +64,16 @@ class QuickbooksTime
 
   def on_fail(stage)
     LOG.error [:quickbooks_time_sync_failed, stage]
+  end
+
+  def schedule_poll
+    add_timeout(proc { poll_timesheets }, POLL_INTERVAL)
+  end
+
+  def poll_timesheets
+    TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |_ok|
+      QuickbooksTime::Missive::Dispatcher.start(queue, limiter, repos.timesheets)
+      schedule_poll
+    end
   end
 end

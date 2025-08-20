@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'ostruct'
+require 'json'
+require 'securerandom'
 
 class QuickbooksTime
   module Missive
@@ -8,15 +10,21 @@ class QuickbooksTime
       API_ENDPOINT = 'https://api.missive.app'
 
       def post(payload)
-        yield(OpenStruct.new(code: 200, body: 'ok')) if block_given?
+        res = OpenStruct.new(code: 200, body: { posts: { id: SecureRandom.uuid } }.to_json)
+        yield(res) if block_given?
+        res
       end
 
       def delete(path)
-        yield(OpenStruct.new(code: 200, body: 'ok')) if block_given?
+        res = OpenStruct.new(code: 200, body: 'ok')
+        yield(res) if block_given?
+        res
       end
 
       def get(path)
-        yield(OpenStruct.new(code: 200, body: '{}')) if block_given?
+        res = OpenStruct.new(code: 200, body: '{}')
+        yield(res) if block_given?
+        res
       end
     end
   end
