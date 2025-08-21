@@ -16,11 +16,11 @@ class QuickbooksTime
         flags << 'manual' if (ts['type'] || ts[:type] || ts['entry_type'])&.downcase == 'manual'
         flags << 'over 8h' if duration_hours > 8
         flag_str = flags.empty? ? '' : " **[#{flags.join(', ')}]**"
-        lines = ["#{user} • #{job}#{flag_str}"]
-        lines << "Shift: #{start_t.strftime('%-l:%M%P')} to #{end_t.strftime('%-l:%M%P')}" if start_t && end_t
-        lines << "Duration: #{format('%.2f', duration_hours)}h"
+        lines = ["**User:** #{user}", "**Job:** #{job}#{flag_str}"]
+        lines << "**Shift:** #{start_t.strftime('%-l:%M%P')} to #{end_t.strftime('%-l:%M%P')}" if start_t && end_t
+        lines << "**Duration:** #{format('%.2f', duration_hours)}h"
         notes = ts['notes'] || ts[:notes]
-        lines << "Notes: #{notes}" if notes && !notes.strip.empty?
+        lines << "**Notes:** #{notes}" if notes && !notes.strip.empty?
         lines.join("\n")
       end
     end

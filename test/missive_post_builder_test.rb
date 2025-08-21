@@ -15,11 +15,12 @@ class MissivePostBuilderTest < Minitest::Test
       'jobsite_name' => 'Main Site'
     }
     post = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+    md = post[:posts][:attachments][0][:markdown]
 
     assert_equal ['qbt:job:2'], post[:posts][:references]
     assert_equal 'QuickBooks Time', post[:posts][:username]
-    assert_match(/John Doe/, post[:posts][:attachments][0][:markdown])
-    assert_match(/Main Site/, post[:posts][:attachments][0][:markdown])
+    assert_includes md, '**User:** John Doe'
+    assert_includes md, '**Job:** Main Site'
     assert_equal Constants::STATUS_COLORS['unknown'], post[:posts][:attachments][0][:color]
     assert_match(/John Doe/, post[:posts][:notification][:title])
     assert_match(/Main Site/, post[:posts][:conversation_subject])
@@ -39,6 +40,6 @@ class MissivePostBuilderTest < Minitest::Test
     post = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
     md = post[:posts][:attachments][0][:markdown]
 
-    assert_includes md, 'Shift: 10:00am to 6:00pm'
+    assert_includes md, '**Shift:** 10:00am to 6:00pm'
   end
 end
