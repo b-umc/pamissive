@@ -18,8 +18,8 @@ class QuickbooksTime
         flags << 'over 8h' if duration_hours > 8
         flag_str = flags.empty? ? '' : " **[#{flags.join(', ')}]**"
         lines = ["#{user} • #{job}#{flag_str}"]
-        lines << "Start: #{start_t.utc.strftime('%Y-%m-%d %H:%M')}" if start_t
-        lines << "End: #{end_t.utc.strftime('%Y-%m-%d %H:%M')}" if end_t
+        lines << "Start: #{start_t.strftime('%Y-%m-%d %H:%M %:z')}" if start_t
+        lines << "End: #{end_t.strftime('%Y-%m-%d %H:%M %:z')}" if end_t
         lines << "Duration: #{format('%.2f', duration_hours)}h"
         notes = ts['notes'] || ts[:notes]
         lines << "Notes: #{notes}" if notes && !notes.strip.empty?
@@ -69,6 +69,15 @@ class QuickbooksTime
                   elsif date
                     Time.parse("#{date}T09:30:00Z") + secs rescue nil
                   end
+
+        tz_offset = ts['tz_offset'] || ts[:tz_offset] || ts['tz_offset_minutes'] || ts[:tz_offset_minutes]
+        if tz_offset
+          offset = tz_offset.to_i
+          offset *= 60 if offset.between?(-720, 720)
+          start_t = start_t&.getlocal(offset)
+          end_t   = end_t&.getlocal(offset)
+        end
+
         [start_t, end_t]
       end
 

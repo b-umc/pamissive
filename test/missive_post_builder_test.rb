@@ -24,4 +24,21 @@ class MissivePostBuilderTest < Minitest::Test
     assert_match(/John Doe/, post[:posts][:notification][:title])
     assert_match(/Main Site/, post[:posts][:conversation_subject])
   end
+
+  def test_timesheet_event_includes_timezone
+    ts = {
+      'id' => 1,
+      'jobcode_id' => 2,
+      'user_id' => 3,
+      'start' => '2024-01-01T10:00:00-07:00',
+      'end' => '2024-01-01T18:00:00-07:00',
+      'user_name' => 'John Doe',
+      'jobsite_name' => 'Main Site'
+    }
+    post = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+    md = post[:posts][:attachments][0][:markdown]
+
+    assert_includes md, 'Start: 2024-01-01 10:00 -07:00'
+    assert_includes md, 'End: 2024-01-01 18:00 -07:00'
+  end
 end
