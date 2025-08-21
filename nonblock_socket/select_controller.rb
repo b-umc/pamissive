@@ -142,7 +142,7 @@ class SelectController
 
   def add_timeout(callback_proc, seconds)
     # LOG.debug callback_proc
-    raise 'positive value required for seconds parameter' unless seconds.positive?
+    # raise 'positive value required for seconds parameter' unless seconds.positive?
     raise "invalid proc detected: #{callback_proc.class}" unless callback_proc.respond_to?(:call)
 
     @timeouts[callback_proc] = Time.now + seconds

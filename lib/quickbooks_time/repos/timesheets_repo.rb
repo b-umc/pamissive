@@ -57,5 +57,11 @@ class TimesheetsRepo
   def save_post_id(id, post_id)
     @db.exec_params('UPDATE quickbooks_time_timesheets SET missive_post_id=$1, updated_at=now() WHERE id=$2', [post_id, id])
   end
+
+  def unposted_since(date)
+    res = @db.exec_params('SELECT * FROM quickbooks_time_timesheets WHERE date >= $1 AND missive_post_id IS NULL', [date])
+    res.map { |r| r }
+
+  end
 end
 
