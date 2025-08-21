@@ -7,6 +7,7 @@ require_relative 'util/constants'
 require_relative '../../nonblock_socket/select_controller'
 
 class QuickbooksTime
+  include TimeoutInterface
   attr_reader :qbt, :repos, :cursor, :queue, :limiter
   attr_accessor :auth
 
@@ -28,28 +29,28 @@ class QuickbooksTime
 
   def authorized
     LOG.info [:quickbooks_time_sync_start]
-    UsersSyncer.new(qbt, repos).run do |ok|
-      if ok
-        JobsSyncer.new(qbt, repos).run do |ok2|
-          if ok2
-            TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |ok3|
-              if ok3
+    # UsersSyncer.new(qbt, repos).run do |ok|
+    #   if ok
+    #     JobsSyncer.new(qbt, repos).run do |ok2|
+    #       if ok2
+    #         TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |ok3|
+    #           if ok3
                 MissiveBackfiller.new(repos.timesheets, Constants::MISSIVE_BACKFILL_MONTHS).run
                 QuickbooksTime::Missive::Dispatcher.start(queue, limiter, repos.timesheets)
                 schedule_poll
                 LOG.info [:quickbooks_time_sync_complete]
-              else
-                on_fail(:timesheets)
-              end
-            end
-          else
-            on_fail(:jobs)
-          end
-        end
-      else
-        on_fail(:users)
-      end
-    end
+    #           else
+    #             on_fail(:timesheets)
+    #           end
+    #         end
+    #       else
+    #         on_fail(:jobs)
+    #       end
+    #     end
+    #   else
+    #     on_fail(:users)
+    #   end
+    # end
   end
 
   def auth_url
