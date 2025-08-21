@@ -1,6 +1,5 @@
 require 'socket'
-require 'serialport'
-require 'adafruit_fingerprint'
+require_relative 'py_fingerprint'
 
 # A TCP server that exposes fingerprint sensor operations over port 8023.
 # Incoming connections can issue commands:
@@ -13,8 +12,7 @@ class FingerprintServer
   PORT = 8023
 
   def initialize(device: '/dev/ttyS2', baud: 57_600)
-    @uart = SerialPort.new(device, baud, 8, 1, SerialPort::NONE)
-    @finger = AdafruitFingerprint.new(@uart)
+    @finger = PyFingerprint.new(device: device, baud: baud)
   end
 
   def start
@@ -29,20 +27,20 @@ class FingerprintServer
 
   def handle_client(client)
     loop do
-      if @finger.read_templates != AdafruitFingerprint::OK
+      if @finger.read_templates != PyFingerprint::OK
         client.puts 'status=Failed to read templates'
         break
       end
 
       client.puts 'status=Waiting for fingerprint...'
-      until @finger.get_image == AdafruitFingerprint::OK
+      until @finger.get_image == PyFingerprint::OK
         begin
           cmd = client.read_nonblock(3)
           case cmd[0]
           when 'e'
             enroll_finger(client, cmd[1..].to_i)
           when 'd'
-            if @finger.delete_model(cmd[1..].to_i) == AdafruitFingerprint::OK
+            if @finger.delete_model(cmd[1..].to_i) == PyFingerprint::OK
               client.puts 'status=Deleted!'
             else
               client.puts 'status=Failed to delete'
@@ -58,10 +56,10 @@ class FingerprintServer
       end
 
       client.puts 'status=Templating...'
-      next unless @finger.image_2_tz(1) == AdafruitFingerprint::OK
+      next unless @finger.image_2_tz(1) == PyFingerprint::OK
 
       client.puts 'status=Searching...'
-      next unless @finger.finger_search == AdafruitFingerprint::OK
+      next unless @finger.finger_search == PyFingerprint::OK
 
       client.puts "status=Match Found,#{@finger.finger_id}"
       sleep 5
@@ -75,8 +73,8 @@ class FingerprintServer
       client.puts(i.zero? ? 'status=Place finger on sensor...' : 'status=Place same finger again...')
       loop do
         img = @finger.get_image
-        break if img == AdafruitFingerprint::OK
-        if img == AdafruitFingerprint::IMAGEFAIL
+        break if img == PyFingerprint::OK
+        if img == PyFingerprint::IMAGEFAIL
           client.puts 'status=Imaging error'
           return
         end
@@ -84,7 +82,7 @@ class FingerprintServer
 
       client.puts 'status=Templating...'
       tz = @finger.image_2_tz(i + 1)
-      unless tz == AdafruitFingerprint::OK
+      unless tz == PyFingerprint::OK
         client.puts 'status=Other error'
         return
       end
@@ -93,18 +91,18 @@ class FingerprintServer
         client.puts 'status=Remove finger'
         sleep 1
         img = @finger.get_image
-        img = @finger.get_image while img != AdafruitFingerprint::NOFINGER
+        img = @finger.get_image while img != PyFingerprint::NOFINGER
       end
     end
 
     client.puts 'status=Creating model...'
-    unless @finger.create_model == AdafruitFingerprint::OK
+    unless @finger.create_model == PyFingerprint::OK
       client.puts 'status=Other error'
       return
     end
 
     client.puts "status=Storing model ##{location}..."
-    if @finger.store_model(location) == AdafruitFingerprint::OK
+    if @finger.store_model(location) == PyFingerprint::OK
       client.puts 'status=Stored'
     else
       client.puts 'status=Other error'
