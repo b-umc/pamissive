@@ -95,7 +95,7 @@ class QuickbooksTime
             conversation_subject: "QuickBooks Time: #{job_name}",
             notification: { title: "Timesheet • #{user_name}",
                             body: ::Util::Format.notif_from_md(md) },
-            attachments: [{ markdown: md, timestamp: end_t.to_i, color: Colors.for(ts) }],
+            attachments: [{ markdown: md, timestamp: end_t&.utc&.to_i, color: Colors.for(ts) }],
             add_to_inbox: false, add_to_team_inbox: false
           }
         }

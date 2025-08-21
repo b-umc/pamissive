@@ -42,4 +42,20 @@ class MissivePostBuilderTest < Minitest::Test
 
     assert_includes md, '**Shift:** 10:00am to 6:00pm'
   end
+
+  def test_timesheet_event_uses_end_time_for_timestamp
+    ts = {
+      'id' => 1,
+      'quickbooks_time_jobsite_id' => 2,
+      'user_id' => 3,
+      'start' => '2024-01-01T17:00:00Z',
+      'end' => '2024-01-01T18:00:00Z',
+      'tz_offset_minutes' => -420,
+      'user_name' => 'John Doe',
+      'jobsite_name' => 'Main Site'
+    }
+    post = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+    _start_t, end_t = QuickbooksTime::Missive::PostBuilder.compute_times(ts)
+    assert_equal end_t.utc.to_i, post[:posts][:attachments][0][:timestamp]
+  end
 end
