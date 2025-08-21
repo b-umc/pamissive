@@ -21,8 +21,10 @@ class TimesheetsSyncer
 
         touched[ts['jobcode_id']] = true
         QuickbooksTime::Missive::Queue.enqueue_delete(old_post_id) if old_post_id
-        payload = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
-        QuickbooksTime::Missive::Queue.enqueue_post(payload, timesheet_id: ts['id'])
+        payloads = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+        Array(payloads).each do |payload|
+          QuickbooksTime::Missive::Queue.enqueue_post(payload, timesheet_id: ts['id'])
+        end
       end
     end) do |ok|
       if ok

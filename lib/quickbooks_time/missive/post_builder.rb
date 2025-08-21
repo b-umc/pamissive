@@ -83,22 +83,50 @@ class QuickbooksTime
         org = ENV.fetch('MISSIVE_ORG_ID', nil) if team
         start_t, end_t = PostBuilder.compute_times(ts)
         md = Templates.timesheet_markdown(ts, start_t, end_t)
-        job_name  = ts['jobsite_name'] || JobName.lookup(ts['quickbooks_time_jobsite_id'])
-        user_name = ts['user_name']   || UserName.lookup(ts['user_id'])
-        {
-          posts: {
-            references: ["qbt:job:#{ts['quickbooks_time_jobsite_id']}"] ,
-            username: 'QuickBooks Time',
-            team: team,
-            force_team: !team.nil?,
-            organization: org,
+        job_id   = ts['quickbooks_time_jobsite_id']
+        user_id  = ts['user_id']
+        job_name = ts['jobsite_name'] || JobName.lookup(job_id)
+        user_name = ts['user_name'] || UserName.lookup(user_id)
+
+        job_ref  = "qbt:job:#{job_id}"
+        user_ref = "qbt:user:#{user_id}"
+
+        job_link_md = "[#{job_name}](ref:#{job_ref})"
+        user_link_md = "[#{user_name}](ref:#{user_ref},#{job_ref})"
+
+        job_md  = "#{md}\n\nTech thread: #{user_link_md}"
+        user_md = "#{md}\n\nJob thread: #{job_link_md}"
+
+        base = {
+          username: 'QuickBooks Time',
+          team: team,
+          force_team: !team.nil?,
+          organization: org,
+          add_to_inbox: false,
+          add_to_team_inbox: false
+        }
+
+        job_post = {
+          posts: base.merge(
+            references: [job_ref],
             conversation_subject: "QuickBooks Time: #{job_name}",
             notification: { title: "Timesheet • #{user_name}",
-                            body: ::Util::Format.notif_from_md(md) },
-            attachments: [{ markdown: md, timestamp: end_t&.utc&.to_i, color: Colors.for(ts) }],
-            add_to_inbox: false, add_to_team_inbox: false
-          }
+                            body: ::Util::Format.notif_from_md(job_md) },
+            attachments: [{ markdown: job_md, timestamp: end_t&.utc&.to_i, color: Colors.for(ts) }]
+          )
         }
+
+        user_post = {
+          posts: base.merge(
+            references: [user_ref, job_ref],
+            conversation_subject: "QuickBooks Time: #{user_name}",
+            notification: { title: "Timesheet • #{job_name}",
+                            body: ::Util::Format.notif_from_md(user_md) },
+            attachments: [{ markdown: user_md, timestamp: end_t&.utc&.to_i, color: Colors.for(ts) }]
+          )
+        }
+
+        [job_post, user_post]
       end
 
       def self.overview(job_id, md, status_color)

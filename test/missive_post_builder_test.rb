@@ -14,16 +14,20 @@ class MissivePostBuilderTest < Minitest::Test
       'user_name' => 'John Doe',
       'jobsite_name' => 'Main Site'
     }
-    post = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
-    md = post[:posts][:attachments][0][:markdown]
+    posts = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+    job_post = posts.find { |p| p[:posts][:references] == ['qbt:job:2'] }
+    tech_post = posts.find { |p| p[:posts][:references] == ['qbt:user:3', 'qbt:job:2'] }
+    md_job = job_post[:posts][:attachments][0][:markdown]
+    md_tech = tech_post[:posts][:attachments][0][:markdown]
 
-    assert_equal ['qbt:job:2'], post[:posts][:references]
-    assert_equal 'QuickBooks Time', post[:posts][:username]
-    assert_includes md, '**User:** John Doe'
-    assert_includes md, '**Job:** Main Site'
-    assert_equal Constants::STATUS_COLORS['unknown'], post[:posts][:attachments][0][:color]
-    assert_match(/John Doe/, post[:posts][:notification][:title])
-    assert_match(/Main Site/, post[:posts][:conversation_subject])
+    assert_equal 'QuickBooks Time', job_post[:posts][:username]
+    assert_includes md_job, '**User:** John Doe'
+    assert_includes md_job, '**Job:** Main Site'
+    assert_includes md_job, '(ref:qbt:user:3,qbt:job:2)'
+    assert_includes md_tech, '(ref:qbt:job:2)'
+    assert_equal Constants::STATUS_COLORS['unknown'], job_post[:posts][:attachments][0][:color]
+    assert_match(/John Doe/, job_post[:posts][:notification][:title])
+    assert_match(/Main Site/, job_post[:posts][:conversation_subject])
   end
 
   def test_timesheet_event_includes_timezone
@@ -37,8 +41,9 @@ class MissivePostBuilderTest < Minitest::Test
       'user_name' => 'John Doe',
       'jobsite_name' => 'Main Site'
     }
-    post = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
-    md = post[:posts][:attachments][0][:markdown]
+    posts = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+    job_post = posts.find { |p| p[:posts][:references] == ['qbt:job:2'] }
+    md = job_post[:posts][:attachments][0][:markdown]
 
     assert_includes md, '**Shift:** 10:00am to 6:00pm'
   end
@@ -54,8 +59,9 @@ class MissivePostBuilderTest < Minitest::Test
       'user_name' => 'John Doe',
       'jobsite_name' => 'Main Site'
     }
-    post = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+    posts = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+    job_post = posts.find { |p| p[:posts][:references] == ['qbt:job:2'] }
     _start_t, end_t = QuickbooksTime::Missive::PostBuilder.compute_times(ts)
-    assert_equal end_t.utc.to_i, post[:posts][:attachments][0][:timestamp]
+    assert_equal end_t.utc.to_i, job_post[:posts][:attachments][0][:timestamp]
   end
 end
