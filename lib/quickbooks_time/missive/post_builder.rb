@@ -10,8 +10,8 @@ class QuickbooksTime
     module Templates
       def self.timesheet_markdown(ts)
         start_t, end_t = PostBuilder.compute_times(ts)
-        user = UserName.lookup(ts['user_id'])
-        job  = JobName.lookup(ts['jobcode_id'])
+        user = ts['user_name'] || UserName.lookup(ts['user_id'])
+        job  = ts['jobsite_name'] || JobName.lookup(ts['jobcode_id'])
         duration_hours = (ts['duration'] || ts[:duration] || ts['duration_seconds'] || 0).to_i / 3600.0
         flags = []
         flags << 'manual' if (ts['type'] || ts[:type] || ts['entry_type'])&.downcase == 'manual'
@@ -74,12 +74,14 @@ class QuickbooksTime
 
       def self.timesheet_event(ts)
         md = Templates.timesheet_markdown(ts)
+        job_name  = ts['jobsite_name'] || JobName.lookup(ts['jobcode_id'])
+        user_name = ts['user_name']   || UserName.lookup(ts['user_id'])
         {
           posts: {
-            references: ["qbt:job:#{ts['jobcode_id']}", "qbt:timesheet:#{ts['id']}", "qbt:user:#{ts['user_id']}"] ,
+            references: ["qbt:job:#{ts['jobcode_id']}"] ,
             username: 'QuickBooks Time',
-            conversation_subject: "QuickBooks Time: #{JobName.lookup(ts['jobcode_id'])}",
-            notification: { title: "Timesheet • #{UserName.lookup(ts['user_id'])}",
+            conversation_subject: "QuickBooks Time: #{job_name}",
+            notification: { title: "Timesheet • #{user_name}",
                             body: ::Util::Format.notif_from_md(md) },
             attachments: [{ markdown: md, timestamp: Time.now.to_i, color: Colors.for(ts) }],
             add_to_inbox: false, add_to_team_inbox: false
