@@ -54,6 +54,7 @@ class QuickbooksTime
         entry   = (ts['type'] || ts[:type] || ts['entry_type']).to_s.downcase
         start_s = ts['start'] || ts[:start] || ts['start_time'] || ts[:start_time]
         end_s   = ts['end'] || ts[:end] || ts['end_time'] || ts[:end_time]
+
         date    = ts['date'] || ts[:date]
 
         if (start_s.nil? || start_s.empty?) && entry == 'manual' && date

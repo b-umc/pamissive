@@ -61,6 +61,7 @@ class TimesheetsRepo
   def unposted_since(date)
     res = @db.exec_params('SELECT * FROM quickbooks_time_timesheets WHERE date >= $1 AND missive_post_id IS NULL', [date])
     res.map { |r| r }
+
   end
 end
 

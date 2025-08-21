@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Constants
-  QBT_PAGE_LIMIT          = ENV.fetch('QBT_PAGE_LIMIT', '50').to_i
+  QBT_PAGE_LIMIT          = ENV.fetch('QBT_PAGE_LIMIT', '200').to_i
   QBT_RATE_INTERVAL       = ENV.fetch('QBT_RATE_INTERVAL', '0.2').to_f
   MISSIVE_POST_MIN_INTERVAL = ENV.fetch('MISSIVE_POST_MIN_INTERVAL', '5').to_f
   QBT_POLL_INTERVAL       = ENV.fetch('QBT_POLL_INTERVAL', '60').to_i

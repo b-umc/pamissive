@@ -2,6 +2,7 @@
 
 require_relative '../../../api/missive/missive'
 
+
 class QuickbooksTime
   module Missive
     # Lightweight adapter around the top-level `Missive` API helper
@@ -28,6 +29,7 @@ class QuickbooksTime
       # Fetch data from the Missive API at the given `path`.
       def get(path, &block)
         @channel.channel_get(path, &block)
+
       end
     end
   end

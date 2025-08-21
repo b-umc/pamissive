@@ -38,6 +38,7 @@ class QuickbooksTime
                 MissiveBackfiller.new(repos.timesheets, Constants::MISSIVE_BACKFILL_MONTHS).run
                 QuickbooksTime::Missive::Dispatcher.start(queue, limiter, repos.timesheets)
                 schedule_poll
+
                 LOG.info [:quickbooks_time_sync_complete]
     #           else
     #             on_fail(:timesheets)
