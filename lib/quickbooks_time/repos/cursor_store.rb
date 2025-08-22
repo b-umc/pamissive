@@ -35,13 +35,14 @@ class CursorStore
   def write(ts, id)
     @timestamp = ts
     @id = id
-    @db.exec_params(
-      'INSERT INTO api_sync_logs (api_name, last_successful_sync, last_id) '
-      'VALUES ($1,$2,$3) '
-      'ON CONFLICT (api_name) DO UPDATE SET '
-      '  last_successful_sync=EXCLUDED.last_successful_sync, '
-      '  last_id=EXCLUDED.last_id',
-      [@api_name, ts, id]
-    )
+    sql = <<~SQL
+      INSERT INTO api_sync_logs (api_name, last_successful_sync, last_id)
+      VALUES ($1,$2,$3)
+      ON CONFLICT (api_name) DO UPDATE SET
+        last_successful_sync=EXCLUDED.last_successful_sync,
+        last_id=EXCLUDED.last_id
+    SQL
+
+    @db.exec_params(sql, [@api_name, ts, id])
   end
 end
