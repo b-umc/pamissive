@@ -35,6 +35,7 @@ class FingerprintServer
 
       client.puts 'status=Waiting for fingerprint...'
       until @finger.get_image == PyFingerprint::OK
+        @finger.set_led(mode: 3)
         begin
           cmd = client.read_nonblock(3)
           case cmd[0]
@@ -57,12 +58,15 @@ class FingerprintServer
       end
 
       client.puts 'status=Templating...'
+      @finger.set_led(mode: 3)
       next unless @finger.image_2_tz(1) == PyFingerprint::OK
 
       client.puts 'status=Searching...'
+      @finger.set_led(mode: 3)
       next unless @finger.finger_search == PyFingerprint::OK
 
       client.puts "status=Match Found,#{@finger.finger_id}"
+      @finger.set_led(mode: 3)
       sleep 5
     end
   ensure
