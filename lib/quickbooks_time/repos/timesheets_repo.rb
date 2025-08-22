@@ -59,7 +59,15 @@ class TimesheetsRepo
   end
 
   def unposted_since(date)
-    res = @db.exec_params('SELECT * FROM quickbooks_time_timesheets WHERE date >= $1 AND missive_post_id IS NULL', [date])
+    res = @db.exec_params(
+      'SELECT t.*, j.name AS jobsite_name, '
+      "       (u.first_name || ' ' || u.last_name) AS user_name "
+      'FROM quickbooks_time_timesheets t '
+      'LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id '
+      'LEFT JOIN quickbooks_time_users u ON u.id = t.user_id '
+      'WHERE t.date >= $1 AND t.missive_post_id IS NULL',
+      [date]
+    )
     res.map { |r| r }
 
   end

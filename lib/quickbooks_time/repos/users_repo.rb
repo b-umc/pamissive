@@ -30,4 +30,10 @@ class UsersRepo
     end
     changed
   end
+
+  def name(id)
+    res = @db.exec_params('SELECT first_name, last_name FROM quickbooks_time_users WHERE id=$1', [id])
+    return nil if res.ntuples.zero?
+    [res[0]['first_name'], res[0]['last_name']].compact.join(' ').strip
+  end
 end

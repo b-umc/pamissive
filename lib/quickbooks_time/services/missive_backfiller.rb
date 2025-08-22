@@ -17,8 +17,10 @@ class MissiveBackfiller
     rows  = @repo.unposted_since(since)
     rows.sort_by! { |ts| QuickbooksTime::Missive::PostBuilder.compute_times(ts).last || Time.at(0) }
     rows.each do |ts|
-      payload = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
-      QuickbooksTime::Missive::Queue.enqueue_post(payload, timesheet_id: ts['id'])
+      payloads = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+      Array(payloads).each do |payload|
+        QuickbooksTime::Missive::Queue.enqueue_post(payload, timesheet_id: ts['id'])
+      end
     end
   end
 end

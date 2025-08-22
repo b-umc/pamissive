@@ -4,22 +4,20 @@ require 'time'
 require_relative '../util/constants'
 require_relative '../util/format'
 
-# Placeholder helpers used by PostBuilder
+# Helpers used by PostBuilder
 class QuickbooksTime
   module Missive
     module Templates
-      def self.timesheet_markdown(ts)
-        start_t, end_t = PostBuilder.compute_times(ts)
-        user = UserName.lookup(ts['user_id'])
-        job  = JobName.lookup(ts['jobcode_id'])
+      def self.timesheet_markdown(ts, start_t, end_t)
+        user = ts['user_name'] || UserName.lookup(ts['user_id'])
+        job  = ts['jobsite_name'] || JobName.lookup(ts['quickbooks_time_jobsite_id'] || ts['jobcode_id'])
         duration_hours = (ts['duration'] || ts[:duration] || ts['duration_seconds'] || 0).to_i / 3600.0
         flags = []
         flags << 'manual' if (ts['type'] || ts[:type] || ts['entry_type'])&.downcase == 'manual'
         flags << 'over 8h' if duration_hours > 8
         flag_str = flags.empty? ? '' : " **[#{flags.join(', ')}]**"
         lines = ["#{user} • #{job}#{flag_str}"]
-        lines << "Start: #{start_t.utc.strftime('%Y-%m-%d %H:%M')}" if start_t
-        lines << "End: #{end_t.utc.strftime('%Y-%m-%d %H:%M')}" if end_t
+        lines << "Shift: #{start_t.strftime('%-l:%M%P')} to #{end_t.strftime('%-l:%M%P')}" if start_t && end_t
         lines << "Duration: #{format('%.2f', duration_hours)}h"
         notes = ts['notes'] || ts[:notes]
         lines << "Notes: #{notes}" if notes && !notes.strip.empty?
@@ -69,22 +67,58 @@ class QuickbooksTime
                   elsif date
                     Time.parse("#{date}T09:30:00Z") + secs rescue nil
                   end
+
+        offset = (ts['tz_offset_minutes'] || ts[:tz_offset_minutes])&.to_i
+        if offset
+          start_t = start_t&.getlocal(offset * 60)
+          end_t   = end_t&.getlocal(offset * 60)
+        end
+
         [start_t, end_t]
       end
 
       def self.timesheet_event(ts)
-        md = Templates.timesheet_markdown(ts)
-        {
-          posts: {
-            references: ["qbt:job:#{ts['jobcode_id']}", "qbt:timesheet:#{ts['id']}", "qbt:user:#{ts['user_id']}"] ,
-            username: 'QuickBooks Time',
-            conversation_subject: "QuickBooks Time: #{JobName.lookup(ts['jobcode_id'])}",
-            notification: { title: "Timesheet • #{UserName.lookup(ts['user_id'])}",
-                            body: ::Util::Format.notif_from_md(md) },
-            attachments: [{ markdown: md, timestamp: Time.now.to_i, color: Colors.for(ts) }],
-            add_to_inbox: false, add_to_team_inbox: false
-          }
+        start_t, end_t = compute_times(ts)
+        base_md = Templates.timesheet_markdown(ts, start_t, end_t)
+
+        job_id    = ts['quickbooks_time_jobsite_id'] || ts['jobcode_id']
+        user_id   = ts['user_id']
+        job_name  = ts['jobsite_name'] || JobName.lookup(job_id)
+        user_name = ts['user_name'] || UserName.lookup(user_id)
+
+        job_md  = base_md + "\nTech thread: [#{user_name}](ref:qbt:user:#{user_id},qbt:job:#{job_id})"
+        tech_md = base_md + "\nJob thread: [#{job_name}](ref:qbt:job:#{job_id})"
+
+        team = ENV.fetch('QBT_POST_TEAM', nil)
+        org  = ENV.fetch('MISSIVE_ORG_ID', nil) if team
+        common = {
+          username: 'QuickBooks Time',
+          team: team,
+          force_team: !team.nil?,
+          organization: org,
+          add_to_inbox: false,
+          add_to_team_inbox: false
         }
+
+        job_post = {
+          posts: common.merge(
+            references: ["qbt:job:#{job_id}"],
+            conversation_subject: "QuickBooks Time: #{job_name}",
+            notification: { title: "Timesheet • #{user_name}", body: ::Util::Format.notif_from_md(job_md) },
+            attachments: [{ markdown: job_md, timestamp: end_t.to_i, color: Colors.for(ts) }]
+          )
+        }
+
+        tech_post = {
+          posts: common.merge(
+            references: ["qbt:user:#{user_id}", "qbt:job:#{job_id}"],
+            conversation_subject: "QuickBooks Time: #{user_name}",
+            notification: { title: "Timesheet • #{job_name}", body: ::Util::Format.notif_from_md(tech_md) },
+            attachments: [{ markdown: tech_md, timestamp: end_t.to_i, color: Colors.for(ts) }]
+          )
+        }
+
+        [job_post, tech_post]
       end
 
       def self.overview(job_id, md, status_color)
@@ -93,8 +127,7 @@ class QuickbooksTime
             references: ["qbt:job:#{job_id}"],
             username: 'Overview',
             conversation_subject: "QuickBooks Time: #{JobName.lookup(job_id)}",
-            notification: { title: "QBT Overview • #{JobName.lookup(job_id)}",
-                            body: ::Util::Format.notif_from_md(md, 180) },
+            notification: { title: "QBT Overview • #{JobName.lookup(job_id)}", body: ::Util::Format.notif_from_md(md, 180) },
             attachments: [{ markdown: md, timestamp: Time.now.to_i, color: status_color }],
             add_to_inbox: false, add_to_team_inbox: false
           }

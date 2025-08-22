@@ -7,8 +7,10 @@ require_relative 'overview_refresher'
 
 class TimesheetsSyncer
   def initialize(qbt, repos, cursor)
-    @stream = TimesheetStream.new(qbt_client: qbt, cursor_store: cursor, limit: Constants::QBT_PAGE_LIMIT)
-    @ts_repo = repos.timesheets
+    @stream    = TimesheetStream.new(qbt_client: qbt, cursor_store: cursor, limit: Constants::QBT_PAGE_LIMIT)
+    @ts_repo   = repos.timesheets
+    @jobs_repo = repos.jobs
+    @users_repo = repos.users
   end
 
   def backfill_all(&done)
@@ -19,10 +21,15 @@ class TimesheetsSyncer
         changed, old_post_id = @ts_repo.upsert(ts)
         next unless changed
 
+        ts['jobsite_name'] ||= @jobs_repo.name(ts['jobcode_id'] || ts['quickbooks_time_jobsite_id'])
+        ts['user_name']    ||= @users_repo.name(ts['user_id'])
+
         touched[ts['jobcode_id']] = true
         QuickbooksTime::Missive::Queue.enqueue_delete(old_post_id) if old_post_id
-        payload = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
-        QuickbooksTime::Missive::Queue.enqueue_post(payload, timesheet_id: ts['id'])
+        payloads = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+        Array(payloads).each do |payload|
+          QuickbooksTime::Missive::Queue.enqueue_post(payload, timesheet_id: ts['id'])
+        end
       end
     end) do |ok|
       if ok
