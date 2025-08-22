@@ -71,8 +71,8 @@ class QuickbooksTime
 
         offset = (ts['tz_offset_minutes'] || ts[:tz_offset_minutes])&.to_i
         if offset
-          start_t = start_t&.getlocal(offset * 60)
-          end_t   = end_t&.getlocal(offset * 60)
+          start_t = start_t&.getlocal(-offset * 60)
+          end_t   = end_t&.getlocal(-offset * 60)
         end
 
         [start_t, end_t]

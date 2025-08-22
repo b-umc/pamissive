@@ -18,6 +18,7 @@ class TimesheetsRepo
     entry     = ts['type'] || ts[:type]
     start_t   = ts['start'] || ts[:start]
     end_t     = ts['end'] || ts[:end]
+    offset    = (ts['tz_offset_minutes'] || ts[:tz_offset_minutes])&.to_i
     created   = ts['created'] || ts[:created]
     modified  = ts['last_modified'] || ts[:last_modified]
 
@@ -26,15 +27,15 @@ class TimesheetsRepo
     created   = nil if created.nil? || created == ''
     modified  = nil if modified.nil? || modified == ''
 
-    hash = Digest::SHA1.hexdigest([user_id, date, secs, notes, entry, start_t, end_t].join('|'))
+    hash = Digest::SHA1.hexdigest([user_id, date, secs, notes, entry, start_t, end_t, offset].join('|'))
     res = @db.exec_params('SELECT last_hash, missive_post_id FROM quickbooks_time_timesheets WHERE id=$1', [id])
     if res.ntuples.zero?
       @db.exec_params(
         'INSERT INTO quickbooks_time_timesheets (
            id, quickbooks_time_jobsite_id, user_id, date, duration_seconds,
-           notes, last_hash, entry_type, missive_post_id, start_time, end_time, created_qbt, modified_qbt)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
-        [id, job_id, user_id, date, secs, notes, hash, entry, nil, start_t, end_t, created, modified]
+           notes, last_hash, entry_type, missive_post_id, start_time, end_time, tz_offset_minutes, created_qbt, modified_qbt)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',
+        [id, job_id, user_id, date, secs, notes, hash, entry, nil, start_t, end_t, offset, created, modified]
       )
       [true, nil]
     elsif res[0]['last_hash'] != hash
@@ -44,9 +45,9 @@ class TimesheetsRepo
            SET quickbooks_time_jobsite_id=$1, user_id=$2, date=$3,
                duration_seconds=$4, notes=$5, last_hash=$6,
                entry_type=$7, start_time=$8, end_time=$9,
-               created_qbt=$10, modified_qbt=$11, updated_at=now()
-         WHERE id=$12',
-        [job_id, user_id, date, secs, notes, hash, entry, start_t, end_t, created, modified, id]
+               tz_offset_minutes=$10, created_qbt=$11, modified_qbt=$12, updated_at=now()
+         WHERE id=$13',
+        [job_id, user_id, date, secs, notes, hash, entry, start_t, end_t, offset, created, modified, id]
       )
       [true, old_post_id]
     else

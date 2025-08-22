@@ -37,7 +37,7 @@ class MissivePostBuilderTest < Minitest::Test
       'user_id' => 3,
       'start' => '2024-01-01T17:00:00Z',
       'end' => '2024-01-02T01:00:00Z',
-      'tz_offset_minutes' => -420,
+      'tz_offset_minutes' => 420,
       'user_name' => 'John Doe',
       'jobsite_name' => 'Main Site'
     }
@@ -55,7 +55,7 @@ class MissivePostBuilderTest < Minitest::Test
       'user_id' => 3,
       'start' => '2024-01-01T17:00:00Z',
       'end' => '2024-01-01T18:00:00Z',
-      'tz_offset_minutes' => -420,
+      'tz_offset_minutes' => 420,
       'user_name' => 'John Doe',
       'jobsite_name' => 'Main Site'
     }

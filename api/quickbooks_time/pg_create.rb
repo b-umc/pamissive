@@ -26,6 +26,7 @@ class QuickbooksTime
           last_hash TEXT,
           billed BOOLEAN NOT NULL DEFAULT false,
           billed_invoice_id TEXT,
+          tz_offset_minutes INTEGER,
           created_at TIMESTAMPTZ DEFAULT now(),
           updated_at TIMESTAMPTZ DEFAULT now()
         );
@@ -88,6 +89,13 @@ class QuickbooksTime
             WHERE table_name='quickbooks_time_timesheets' AND column_name='end_time'
           ) THEN
             ALTER TABLE quickbooks_time_timesheets ADD COLUMN end_time TIMESTAMPTZ;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name='quickbooks_time_timesheets' AND column_name='tz_offset_minutes'
+          ) THEN
+            ALTER TABLE quickbooks_time_timesheets ADD COLUMN tz_offset_minutes INTEGER;
           END IF;
 
           IF NOT EXISTS (
