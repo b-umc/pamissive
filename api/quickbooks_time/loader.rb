@@ -37,17 +37,21 @@ repos           = OpenStruct.new(
   jobs:       JobsRepo.new(db: db_conn),
   timesheets: TimesheetsRepo.new(db: db_conn),
   overview:   OverviewRepo.new,
-  sync_log:   SyncLogRepo.new
+  sync_log:   SyncLogRepo.new,
 )
 full_resync = ENV['QBT_FULL_RESYNC'] == '1' || rebuild_timesheets
-cursor          = CursorStore.new(db: db_conn, full_resync: full_resync)
+ts_cursor   = CursorStore.new(db: db_conn, api_name: 'quickbooks_time_timesheets', full_resync: full_resync)
+user_cursor = CursorStore.new(db: db_conn, api_name: 'quickbooks_time_users', full_resync: full_resync)
+job_cursor  = CursorStore.new(db: db_conn, api_name: 'quickbooks_time_jobs', full_resync: full_resync)
 queue           = QuickbooksTime::Missive::Queue
 missive_limiter = RateLimiter.new(interval: Constants::MISSIVE_POST_MIN_INTERVAL)
 
 QBT = QuickbooksTime.new(
   qbt: qbt,
   repos: repos,
-  cursor: cursor,
+  cursor: ts_cursor,
+  users_cursor: user_cursor,
+  jobs_cursor: job_cursor,
   queue: queue,
   limiter: missive_limiter
 ) unless defined?(QBT)

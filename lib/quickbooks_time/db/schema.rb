@@ -30,13 +30,8 @@ class QuickbooksTime
             active BOOLEAN,
             last_modified TIMESTAMPTZ,
             created TIMESTAMPTZ,
-            missive_conversation_id TEXT,
             raw JSONB
           );
-        SQL
-        conn.exec(<<~SQL)
-          ALTER TABLE quickbooks_time_users
-            ADD COLUMN IF NOT EXISTS missive_conversation_id TEXT;
         SQL
       end
 
@@ -56,13 +51,8 @@ class QuickbooksTime
             filtered_customfielditems JSONB,
             active BOOLEAN,
             last_modified TIMESTAMPTZ,
-            created TIMESTAMPTZ,
-            missive_conversation_id TEXT
+            created TIMESTAMPTZ
           );
-        SQL
-        conn.exec(<<~SQL)
-          ALTER TABLE quickbooks_time_jobs
-            ADD COLUMN IF NOT EXISTS missive_conversation_id TEXT;
         SQL
       end
 
@@ -82,7 +72,6 @@ class QuickbooksTime
             missive_post_id TEXT,
             start_time TIMESTAMPTZ,
             end_time TIMESTAMPTZ,
-            tz_offset_minutes INTEGER,
             created_qbt TIMESTAMPTZ,
             modified_qbt TIMESTAMPTZ,
             created_at TIMESTAMPTZ DEFAULT now(),
@@ -121,7 +110,6 @@ class QuickbooksTime
             ADD COLUMN IF NOT EXISTS missive_post_id TEXT,
             ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ,
             ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ,
-            ADD COLUMN IF NOT EXISTS tz_offset_minutes INTEGER,
             ADD COLUMN IF NOT EXISTS created_qbt TIMESTAMPTZ,
             ADD COLUMN IF NOT EXISTS modified_qbt TIMESTAMPTZ;
         SQL

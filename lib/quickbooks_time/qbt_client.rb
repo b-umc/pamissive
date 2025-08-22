@@ -32,8 +32,18 @@ class QbtClient
     api_request("users?#{URI.encode_www_form(params)}", &blk)
   end
 
+  def users_modified_since(timestamp_iso, page: 1, limit: 50, &blk)
+    params = { modified_since: timestamp_iso, page: page, per_page: limit, active: 'both' }
+    api_request("users?#{URI.encode_www_form(params)}", &blk)
+  end
+
   def jobcodes(page:, limit:, &blk)
     params = { page: page, per_page: limit }
+    api_request("jobcodes?#{URI.encode_www_form(params)}", &blk)
+  end
+
+  def jobcodes_modified_since(timestamp_iso, page: 1, limit: 50, &blk)
+    params = { modified_since: timestamp_iso, page: page, per_page: limit }
     api_request("jobcodes?#{URI.encode_www_form(params)}", &blk)
   end
 

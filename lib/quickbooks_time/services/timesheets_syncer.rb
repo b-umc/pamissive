@@ -2,7 +2,6 @@
 
 require_relative '../missive/post_builder'
 require_relative '../missive/queue'
-require_relative '../missive/conversation_resolver'
 require_relative '../streams/timesheet_stream'
 require_relative 'overview_refresher'
 
@@ -10,8 +9,6 @@ class TimesheetsSyncer
   def initialize(qbt, repos, cursor)
     @stream = TimesheetStream.new(qbt_client: qbt, cursor_store: cursor, limit: Constants::QBT_PAGE_LIMIT)
     @ts_repo = repos.timesheets
-    @jobs_repo = repos.jobs
-    @users_repo = repos.users
   end
 
   def backfill_all(&done)
@@ -24,10 +21,8 @@ class TimesheetsSyncer
 
         touched[ts['jobcode_id']] = true
         QuickbooksTime::Missive::Queue.enqueue_delete(old_post_id) if old_post_id
-        job_convo = QuickbooksTime::Missive::ConversationResolver.ensure_job(ts['quickbooks_time_jobsite_id'], @jobs_repo)
-        user_convo = QuickbooksTime::Missive::ConversationResolver.ensure_user(ts['user_id'], @users_repo)
-        payloads = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts, job_conversation_id: job_convo, user_conversation_id: user_convo)
-        payloads.each { |p| QuickbooksTime::Missive::Queue.enqueue_post(p, timesheet_id: ts['id']) }
+        payload = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+        QuickbooksTime::Missive::Queue.enqueue_post(payload, timesheet_id: ts['id'])
       end
     end) do |ok|
       if ok
