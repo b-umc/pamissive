@@ -16,11 +16,11 @@ class QuickbooksTime
         flags << 'manual' if (ts['type'] || ts[:type] || ts['entry_type'])&.downcase == 'manual'
         flags << 'over 8h' if duration_hours > 8
         flag_str = flags.empty? ? '' : " **[#{flags.join(', ')}]**"
-        lines = ["**User:** #{user}", "**Job:** #{job}#{flag_str}"]
-        lines << "**Shift:** #{start_t.strftime('%-l:%M%P')} to #{end_t.strftime('%-l:%M%P')}" if start_t && end_t
-        lines << "**Duration:** #{format('%.2f', duration_hours)}h"
+        lines = ["#{user} • #{job}#{flag_str}"]
+        lines << "Shift: #{start_t.strftime('%-l:%M%P')} to #{end_t.strftime('%-l:%M%P')}" if start_t && end_t
+        lines << "Duration: #{format('%.2f', duration_hours)}h"
         notes = ts['notes'] || ts[:notes]
-        lines << "**Notes:** #{notes}" if notes && !notes.strip.empty?
+        lines << "Notes: #{notes}" if notes && !notes.strip.empty?
         lines.join("\n")
       end
     end
@@ -84,49 +84,24 @@ class QuickbooksTime
         start_t, end_t = PostBuilder.compute_times(ts)
         md = Templates.timesheet_markdown(ts, start_t, end_t)
         job_id   = ts['quickbooks_time_jobsite_id']
-        user_id  = ts['user_id']
         job_name = ts['jobsite_name'] || JobName.lookup(job_id)
-        user_name = ts['user_name'] || UserName.lookup(user_id)
+        user_name = ts['user_name'] || UserName.lookup(ts['user_id'])
 
-        job_ref  = "qbt:job:#{job_id}"
-        user_ref = "qbt:user:#{user_id}"
-
-        job_link_md = "[#{job_name}](ref:#{job_ref})"
-        user_link_md = "[#{user_name}](ref:#{user_ref},#{job_ref})"
-
-        job_md  = "#{md}\n\nTech thread: #{user_link_md}"
-        user_md = "#{md}\n\nJob thread: #{job_link_md}"
-
-        base = {
-          username: 'QuickBooks Time',
-          team: team,
-          force_team: !team.nil?,
-          organization: org,
-          add_to_inbox: false,
-          add_to_team_inbox: false
-        }
-
-        job_post = {
-          posts: base.merge(
-            references: [job_ref],
+        {
+          posts: {
+            references: ["qbt:job:#{job_id}"],
+            username: 'QuickBooks Time',
+            team: team,
+            force_team: !team.nil?,
+            organization: org,
             conversation_subject: "QuickBooks Time: #{job_name}",
             notification: { title: "Timesheet • #{user_name}",
-                            body: ::Util::Format.notif_from_md(job_md) },
-            attachments: [{ markdown: job_md, timestamp: end_t&.utc&.to_i, color: Colors.for(ts) }]
-          )
+                            body: ::Util::Format.notif_from_md(md) },
+            attachments: [{ markdown: md, timestamp: end_t&.utc&.to_i, color: Colors.for(ts) }],
+            add_to_inbox: false,
+            add_to_team_inbox: false
+          }
         }
-
-        user_post = {
-          posts: base.merge(
-            references: [user_ref, job_ref],
-            conversation_subject: "QuickBooks Time: #{user_name}",
-            notification: { title: "Timesheet • #{job_name}",
-                            body: ::Util::Format.notif_from_md(user_md) },
-            attachments: [{ markdown: user_md, timestamp: end_t&.utc&.to_i, color: Colors.for(ts) }]
-          )
-        }
-
-        [job_post, user_post]
       end
 
       def self.overview(job_id, md, status_color)
