@@ -32,6 +32,7 @@ class FingerprintServer
         break
       end
 
+      client.puts "templates=#{@finger.templates.join(',')}"
       client.puts 'status=Waiting for fingerprint...'
       until @finger.get_image == PyFingerprint::OK
         begin

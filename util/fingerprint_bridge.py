@@ -19,6 +19,10 @@ for line in sys.stdin:
     if cmd == 'read_templates':
         result = finger.read_templates()
         print(result)
+        if result == adafruit_fingerprint.OK:
+            print(' '.join(str(t) for t in finger.templates))
+        else:
+            print()
     elif cmd == 'get_image':
         result = finger.get_image()
         print(result)
