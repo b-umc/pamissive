@@ -12,10 +12,8 @@ class EventHandler
     changed, old_post_id = @ts_repo.upsert(ts)
     if changed
       QuickbooksTime::Missive::Queue.enqueue_delete(old_post_id)
-      payloads = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
-      Array(payloads).each do |payload|
-        QuickbooksTime::Missive::Queue.enqueue_post(payload, timesheet_id: ts['id'])
-      end
+      payload = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+      QuickbooksTime::Missive::Queue.enqueue_post(payload, timesheet_id: ts['id'])
     end
     changed
   end
