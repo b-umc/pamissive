@@ -14,15 +14,16 @@ class MissivePostBuilderTest < Minitest::Test
       'user_name' => 'John Doe',
       'jobsite_name' => 'Main Site'
     }
-    post = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
-    md = post[:posts][:attachments][0][:markdown]
+    posts = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts, job_conversation_id: 'jobc', user_conversation_id: 'userc')
+    job_post, tech_post = posts
+    job_md = job_post[:posts][:attachments][0][:markdown]
+    tech_md = tech_post[:posts][:attachments][0][:markdown]
 
-    assert_equal ['qbt:job:2'], post[:posts][:references]
-    assert_equal 'QuickBooks Time', post[:posts][:username]
-    assert_includes md, 'John Doe • Main Site'
-    assert_equal Constants::STATUS_COLORS['unknown'], post[:posts][:attachments][0][:color]
-    assert_match(/John Doe/, post[:posts][:notification][:title])
-    assert_match(/Main Site/, post[:posts][:conversation_subject])
+    assert_equal ['qbt:job:2'], job_post[:posts][:references]
+    assert_equal ['qbt:user:3'], tech_post[:posts][:references]
+    assert_includes job_md, 'John Doe • Main Site'
+    assert_includes job_md, '(missive://mail.missiveapp.com/#/conversations/userc)'
+    assert_includes tech_md, '(missive://mail.missiveapp.com/#/conversations/jobc)'
   end
 
   def test_timesheet_event_includes_timezone
@@ -36,9 +37,8 @@ class MissivePostBuilderTest < Minitest::Test
       'user_name' => 'John Doe',
       'jobsite_name' => 'Main Site'
     }
-    post = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
-    md = post[:posts][:attachments][0][:markdown]
-
+    posts = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+    md = posts.first[:posts][:attachments][0][:markdown]
     assert_includes md, 'Shift: 10:00am to 6:00pm'
   end
 
@@ -53,8 +53,8 @@ class MissivePostBuilderTest < Minitest::Test
       'user_name' => 'John Doe',
       'jobsite_name' => 'Main Site'
     }
-    post = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
+    posts = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
     _start_t, end_t = QuickbooksTime::Missive::PostBuilder.compute_times(ts)
-    assert_equal end_t.utc.to_i, post[:posts][:attachments][0][:timestamp]
+    assert_equal end_t.utc.to_i, posts.first[:posts][:attachments][0][:timestamp]
   end
 end

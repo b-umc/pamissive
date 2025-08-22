@@ -61,6 +61,7 @@ class QuickbooksTime
           active BOOLEAN,
           last_modified TIMESTAMPTZ,
           created TIMESTAMPTZ,
+          missive_conversation_id TEXT,
           raw JSONB
         );
       }
@@ -137,6 +138,24 @@ class QuickbooksTime
           ) THEN
             ALTER TABLE quickbooks_time_jobsite_conversations
               ALTER COLUMN quickbooks_time_jobsite_id TYPE BIGINT;
+          END IF;
+        END $$;
+      },
+      'add_conversation_ids' => %{
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name='quickbooks_time_users' AND column_name='missive_conversation_id'
+          ) THEN
+            ALTER TABLE quickbooks_time_users ADD COLUMN missive_conversation_id TEXT;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name='quickbooks_time_jobs' AND column_name='missive_conversation_id'
+          ) THEN
+            ALTER TABLE quickbooks_time_jobs ADD COLUMN missive_conversation_id TEXT;
           END IF;
         END $$;
       }

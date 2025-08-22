@@ -35,7 +35,7 @@ class QuickbooksTime
     #       if ok2
     #         TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |ok3|
     #           if ok3
-                MissiveBackfiller.new(repos.timesheets, Constants::MISSIVE_BACKFILL_MONTHS).run
+                MissiveBackfiller.new(repos, Constants::MISSIVE_BACKFILL_MONTHS).run
                 QuickbooksTime::Missive::Dispatcher.start(queue, limiter, repos.timesheets)
                 schedule_poll
 

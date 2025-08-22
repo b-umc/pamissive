@@ -38,4 +38,13 @@ class JobsRepo
     end
     changed
   end
+
+  def conversation_id(id)
+    res = @db.exec_params('SELECT missive_conversation_id FROM quickbooks_time_jobs WHERE id=$1', [id])
+    res.ntuples.zero? ? nil : res[0]['missive_conversation_id']
+  end
+
+  def set_conversation_id(id, convo_id)
+    @db.exec_params('UPDATE quickbooks_time_jobs SET missive_conversation_id=$2 WHERE id=$1', [id, convo_id])
+  end
 end

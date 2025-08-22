@@ -3,6 +3,7 @@
 require 'time'
 require_relative '../util/constants'
 require_relative '../util/format'
+require_relative 'conversation'
 
 # Placeholder helpers used by PostBuilder
 class QuickbooksTime
@@ -78,16 +79,22 @@ class QuickbooksTime
         [start_t, end_t]
       end
 
-      def self.timesheet_event(ts)
+      def self.timesheet_event(ts, job_conversation_id: nil, user_conversation_id: nil)
         team = ENV.fetch('QBT_POST_TEAM', nil)
         org = ENV.fetch('MISSIVE_ORG_ID', nil) if team
         start_t, end_t = PostBuilder.compute_times(ts)
         md = Templates.timesheet_markdown(ts, start_t, end_t)
         job_id   = ts['quickbooks_time_jobsite_id']
+        user_id  = ts['user_id']
         job_name = ts['jobsite_name'] || JobName.lookup(job_id)
-        user_name = ts['user_name'] || UserName.lookup(ts['user_id'])
+        user_name = ts['user_name'] || UserName.lookup(user_id)
 
-        {
+        job_md = md.dup
+        user_md = md.dup
+        job_md += "\nTech thread: [#{user_name}](#{Conversation.url(user_conversation_id, deep: true)})" if user_conversation_id
+        user_md += "\nJob thread: [#{job_name}](#{Conversation.url(job_conversation_id, deep: true)})" if job_conversation_id
+
+        job_post = {
           posts: {
             references: ["qbt:job:#{job_id}"],
             username: 'QuickBooks Time',
@@ -96,12 +103,30 @@ class QuickbooksTime
             organization: org,
             conversation_subject: "QuickBooks Time: #{job_name}",
             notification: { title: "Timesheet • #{user_name}",
-                            body: ::Util::Format.notif_from_md(md) },
-            attachments: [{ markdown: md, timestamp: end_t&.utc&.to_i, color: Colors.for(ts) }],
+                            body: ::Util::Format.notif_from_md(job_md) },
+            attachments: [{ markdown: job_md, timestamp: end_t&.utc&.to_i, color: Colors.for(ts) }],
             add_to_inbox: false,
             add_to_team_inbox: false
           }
         }
+
+        tech_post = {
+          posts: {
+            references: ["qbt:user:#{user_id}"],
+            username: 'QuickBooks Time',
+            team: team,
+            force_team: !team.nil?,
+            organization: org,
+            conversation_subject: "QuickBooks Time: #{user_name}",
+            notification: { title: "Timesheet • #{job_name}",
+                            body: ::Util::Format.notif_from_md(user_md) },
+            attachments: [{ markdown: user_md, timestamp: end_t&.utc&.to_i, color: Colors.for(ts) }],
+            add_to_inbox: false,
+            add_to_team_inbox: false
+          }
+        }
+
+        [job_post, tech_post]
       end
 
       def self.overview(job_id, md, status_color)
