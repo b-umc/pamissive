@@ -14,8 +14,8 @@ class UsersRepo
     changed = res.ntuples.zero? || res[0]['last_modified'] != last_modified
     if changed
       @db.exec_params(
-        'INSERT INTO quickbooks_time_users (id, first_name, last_name, username, email, active, last_modified, created, raw)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        'INSERT INTO quickbooks_time_users (id, first_name, last_name, username, email, active, last_modified, created, missive_conversation_id, raw)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          ON CONFLICT (id) DO UPDATE SET
            first_name=EXCLUDED.first_name,
            last_name=EXCLUDED.last_name,
@@ -24,8 +24,9 @@ class UsersRepo
            active=EXCLUDED.active,
            last_modified=EXCLUDED.last_modified,
            created=EXCLUDED.created,
+           missive_conversation_id=EXCLUDED.missive_conversation_id,
            raw=EXCLUDED.raw',
-        [id, user['first_name'], user['last_name'], user['username'], user['email'], user['active'], last_modified, user['created'], user.to_json]
+        [id, user['first_name'], user['last_name'], user['username'], user['email'], user['active'], last_modified, user['created'], user['missive_conversation_id'], user.to_json]
       )
     end
     changed

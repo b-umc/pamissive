@@ -60,12 +60,42 @@ class QuickbooksTime
           active BOOLEAN,
           last_modified TIMESTAMPTZ,
           created TIMESTAMPTZ,
+          missive_conversation_id TEXT,
           raw JSONB
         );
       }
     }.freeze
 
     MIGRATIONS = {
+      'add_missive_conversation_ids' => %{
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name='quickbooks_time_jobs' AND column_name='missive_conversation_id'
+          ) THEN
+            ALTER TABLE quickbooks_time_jobs ADD COLUMN missive_conversation_id TEXT;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name='quickbooks_time_users' AND column_name='missive_conversation_id'
+          ) THEN
+            ALTER TABLE quickbooks_time_users ADD COLUMN missive_conversation_id TEXT;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_name='quickbooks_time_jobsite_conversations'
+          ) THEN
+            UPDATE quickbooks_time_jobs j
+            SET missive_conversation_id = c.missive_conversation_id
+            FROM quickbooks_time_jobsite_conversations c
+            WHERE j.id = c.quickbooks_time_jobsite_id
+              AND j.missive_conversation_id IS NULL;
+          END IF;
+        END $$;
+      },
       'ensure_timesheet_meta_columns' => %{
         DO $$
         BEGIN
