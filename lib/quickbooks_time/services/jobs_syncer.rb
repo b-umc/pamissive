@@ -3,8 +3,8 @@
 require_relative '../streams/jobs_stream'
 
 class JobsSyncer
-  def initialize(qbt, repos)
-    @stream = JobsStream.new(qbt_client: qbt, limit: Constants::QBT_PAGE_LIMIT)
+  def initialize(qbt, repos, cursor)
+    @stream = JobsStream.new(qbt_client: qbt, cursor_store: cursor, limit: Constants::QBT_PAGE_LIMIT)
     @repo = repos.jobs
   end
 

@@ -3,10 +3,9 @@
 require 'time'
 
 class CursorStore
-  API_NAME = 'quickbooks_time_timesheets'
-
-  def initialize(db:, full_resync: false)
+  def initialize(db:, api_name:, full_resync: false)
     @db = db
+    @api_name = api_name
 
     if full_resync
       @timestamp = Time.at(0).utc.iso8601
@@ -16,7 +15,7 @@ class CursorStore
 
     row = @db.exec_params(
       'SELECT last_successful_sync, last_id FROM api_sync_logs WHERE api_name=$1',
-      [API_NAME]
+      [@api_name]
     ).first
 
     @timestamp =
@@ -36,13 +35,14 @@ class CursorStore
   def write(ts, id)
     @timestamp = ts
     @id = id
-    @db.exec_params(
-      'INSERT INTO api_sync_logs (api_name, last_successful_sync, last_id)
-       VALUES ($1,$2,$3)
-       ON CONFLICT (api_name) DO UPDATE SET
-         last_successful_sync=EXCLUDED.last_successful_sync,
-         last_id=EXCLUDED.last_id',
-      [API_NAME, ts, id]
-    )
+    sql = <<~SQL
+      INSERT INTO api_sync_logs (api_name, last_successful_sync, last_id)
+      VALUES ($1,$2,$3)
+      ON CONFLICT (api_name) DO UPDATE SET
+        last_successful_sync=EXCLUDED.last_successful_sync,
+        last_id=EXCLUDED.last_id
+    SQL
+
+    @db.exec_params(sql, [@api_name, ts, id])
   end
 end

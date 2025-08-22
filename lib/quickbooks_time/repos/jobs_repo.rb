@@ -38,4 +38,9 @@ class JobsRepo
     end
     changed
   end
+
+  def name(id)
+    res = @db.exec_params('SELECT name FROM quickbooks_time_jobs WHERE id=$1', [id])
+    res.ntuples.zero? ? nil : res[0]['name']
+  end
 end
