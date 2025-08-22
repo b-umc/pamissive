@@ -13,7 +13,6 @@ class FingerprintServer
 
   def initialize(device: '/dev/ttyS2', baud: 57_600)
     @finger = PyFingerprint.new(device: device, baud: baud)
-    @finger.set_led(mode: 3)
   end
 
   def start
@@ -35,7 +34,6 @@ class FingerprintServer
 
       client.puts 'status=Waiting for fingerprint...'
       until @finger.get_image == PyFingerprint::OK
-        @finger.set_led(mode: 3)
         begin
           cmd = client.read_nonblock(3)
           case cmd[0]
@@ -54,19 +52,16 @@ class FingerprintServer
           client.close
           return
         end
-        sleep 0.1
+        sleep 0.01
       end
 
       client.puts 'status=Templating...'
-      @finger.set_led(mode: 3)
       next unless @finger.image_2_tz(1) == PyFingerprint::OK
 
       client.puts 'status=Searching...'
-      @finger.set_led(mode: 3)
       next unless @finger.finger_search == PyFingerprint::OK
 
       client.puts "status=Match Found,#{@finger.finger_id}"
-      @finger.set_led(mode: 3)
       sleep 5
     end
   ensure

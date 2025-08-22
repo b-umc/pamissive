@@ -44,13 +44,6 @@ for line in sys.stdin:
         location = int(parts[1])
         result = finger.store_model(location)
         print(result)
-    elif cmd == 'set_led':
-        color = int(parts[1]) if len(parts) > 1 else 1
-        mode = int(parts[2]) if len(parts) > 2 else 3
-        speed = int(parts[3], 0) if len(parts) > 3 else 0x80
-        cycles = int(parts[4]) if len(parts) > 4 else 0
-        result = finger.set_led(color=color, mode=mode, speed=speed, cycles=cycles)
-        print(result)
     else:
         result = -1
         print(result)
