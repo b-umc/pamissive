@@ -40,6 +40,10 @@ class PyFingerprint
     send_command("store_model #{location}")
   end
 
+  def set_led(color: 1, mode: 3, speed: 0x80, cycles: 0)
+    send_command("set_led #{color} #{mode} #{speed} #{cycles}")
+  end
+
   private
 
   def send_command(cmd)

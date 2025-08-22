@@ -13,6 +13,7 @@ class FingerprintServer
 
   def initialize(device: '/dev/ttyS2', baud: 57_600)
     @finger = PyFingerprint.new(device: device, baud: baud)
+    @finger.set_led(mode: 3)
   end
 
   def start
