@@ -36,4 +36,12 @@ class UsersRepo
     return nil if res.ntuples.zero?
     [res[0]['first_name'], res[0]['last_name']].compact.join(' ').strip
   end
+
+  def users_without_conversation
+    @db.exec('SELECT * FROM quickbooks_time_users WHERE missive_conversation_id IS NULL').to_a
+  end
+
+  def update_conversation_id(user_id, conversation_id)
+    @db.exec_params('UPDATE quickbooks_time_users SET missive_conversation_id=$1 WHERE id=$2', [conversation_id, user_id])
+  end
 end
