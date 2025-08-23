@@ -5,6 +5,7 @@ require_relative 'services/missive_backfiller'
 require_relative 'missive/dispatcher'
 require_relative 'util/constants'
 require_relative '../../nonblock_socket/select_controller'
+require_relative 'services/users_missive_conversation_creator'
 
 class QuickbooksTime
   include TimeoutInterface
@@ -35,17 +36,18 @@ class QuickbooksTime
       if ok
         JobsSyncer.new(qbt, repos, jobs_cursor).run do |ok2|
           if ok2
-            TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |ok3|
-              if ok3
-                MissiveBackfiller.new(repos.timesheets, Constants::MISSIVE_BACKFILL_MONTHS).run
-                QuickbooksTime::Missive::Dispatcher.start(queue, limiter, repos.timesheets)
-                schedule_polls
+            # TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |ok3| # [DISABLED]
+            #   if ok3
+            #     MissiveBackfiller.new(repos.timesheets, Constants::MISSIVE_BACKFILL_MONTHS).run
+            #     QuickbooksTime::Missive::Dispatcher.start(queue, limiter, repos.timesheets)
+            #     schedule_polls
 
-                LOG.info [:quickbooks_time_sync_complete]
-              else
-                on_fail(:timesheets)
-              end
-            end
+            #     LOG.info [:quickbooks_time_sync_complete]
+            #   else
+            #     on_fail(:timesheets)
+            #   end
+            # end
+            LOG.info [:quickbooks_time_sync_complete_minus_timesheets]
           else
             on_fail(:jobs)
           end
@@ -73,7 +75,7 @@ class QuickbooksTime
   def schedule_polls
     add_timeout(proc { poll_users }, POLL_INTERVAL)
     add_timeout(proc { poll_jobs }, POLL_INTERVAL)
-    add_timeout(proc { poll_timesheets }, POLL_INTERVAL)
+    # add_timeout(proc { poll_timesheets }, POLL_INTERVAL) # [DISABLED]
   end
 
   def poll_users
@@ -88,10 +90,10 @@ class QuickbooksTime
     end
   end
 
-  def poll_timesheets
-    TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |_ok|
-      QuickbooksTime::Missive::Dispatcher.start(queue, limiter, repos.timesheets)
-      add_timeout(proc { poll_timesheets }, POLL_INTERVAL)
-    end
-  end
+  # def poll_timesheets
+  #   TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |_ok|
+  #     QuickbooksTime::Missive::Dispatcher.start(queue, limiter, repos.timesheets)
+  #     add_timeout(proc { poll_timesheets }, POLL_INTERVAL)
+  #   end
+  # end
 end

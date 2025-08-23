@@ -33,15 +33,15 @@ class NonBlockHTTP::Client::ClientSession
     @verb ||= verb
     @options ||= request_options
     @request = NonBlockHTTP::Client::Request.new(url, options: @options, verb: @verb)
-    @socket = socket
+    @socket = create_socket
   end
 
-  def socket
-    NonBlockSocket::Manager.socket(
+  def create_socket
+    NonBlockSocket::Manager.create_socket(
       @request.host,
       @request.port,
-      use_tls: @request.ssl?,
-      ssl_context: @request.ssl_context
+      @request.ssl?,
+      @request.ssl_context
     )
   end
 

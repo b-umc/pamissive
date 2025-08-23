@@ -30,6 +30,7 @@ class QuickbooksTime
             active BOOLEAN,
             last_modified TIMESTAMPTZ,
             created TIMESTAMPTZ,
+            missive_conversation_id TEXT,
             raw JSONB
           );
         SQL
@@ -125,4 +126,3 @@ class QuickbooksTime
     end
   end
 end
-
