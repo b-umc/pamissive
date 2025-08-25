@@ -50,6 +50,18 @@ class Missive
     end
   end
 
+  def channel_patch(endpoint, body_hash, &block)
+    endpoint = "#{API_URL}/#{endpoint}" unless endpoint.start_with?('http')
+
+    LOG.debug([:sending_patch_to_missive_channel, endpoint, :with, body_hash])
+    NonBlockHTTP::Client::ClientSession.new.patch(endpoint, { headers: HEADERS, body: body_hash.to_json }) do |response|
+      # Handle any none 2xx status code as a error.
+      LOG.error([:missive_patch_error, response]) unless (200..299).include?(response.code)
+
+      block.call(response) if block_given?
+    end
+  end
+
   def channel_get(endpoint, &block)
     endpoint = "#{API_URL}/#{endpoint}" unless endpoint.start_with?('http')
 

@@ -12,24 +12,17 @@ class QuickbooksTime
         @channel = channel
       end
 
-      # Send a POST request to the Missive API.
-      #
-      # `payload` is expected to be a hash shaped according to
-      # Missive's API requirements, e.g. `{ posts: { ... } }`.
-      def post(payload, &block)
-        @channel.channel_post('posts', payload, &block)
+      def create_task(payload, &block)
+        @channel.channel_post('tasks', payload, &block)
       end
 
-      # Forward delete requests to the Missive API. `path` should be a
-      # relative endpoint such as "posts/<id>".
-      def delete(path, &block)
-        @channel.channel_delete(path, &block)
+      def update_task(task_id, payload, &block)
+        @channel.channel_patch("tasks/#{task_id}", payload, &block)
       end
 
-      # Fetch data from the Missive API at the given `path`.
-      def get(path, &block)
-        @channel.channel_get(path, &block)
-
+      def delete_task(task_id, &block)
+        # Tasks are "deleted" by updating their status
+        update_task(task_id, { tasks: { status: 'deleted' } }, &block)
       end
     end
   end

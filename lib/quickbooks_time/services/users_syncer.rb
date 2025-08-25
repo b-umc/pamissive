@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require_relative '../streams/users_stream'
-require_relative 'users_missive_conversation_creator'
 
 class UsersSyncer
   def initialize(qbt, repos, cursor)
@@ -11,9 +10,6 @@ class UsersSyncer
 
   def run(&done)
     @stream.each_batch(proc { |rows| rows.each { |u| @repo.upsert(u) } }) do |ok|
-      if ok
-        UsersMissiveConversationCreator.new(@repo).run
-      end
       done&.call(ok)
     end
   rescue StandardError => e

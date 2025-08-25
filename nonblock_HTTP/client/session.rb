@@ -21,7 +21,7 @@ class NonBlockHTTP::Client::ClientSession
   alias post get
   alias put get
   alias delete get
-  alias patch get
+  alias patch get # Added PATCH verb support
   alias head get
   alias options get
   alias connect get

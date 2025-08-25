@@ -7,7 +7,7 @@ require_relative '../../../nonblock_socket/select_controller'
 class QuickbooksTime
   module Missive
     class Queue
-      Task = Struct.new(:action, :payload, :timesheet_id)
+      Task = Struct.new(:action, :payload)
 
       @q = []
       @draining = false
@@ -15,24 +15,28 @@ class QuickbooksTime
       class << self
         include TimeoutInterface
 
-        def enqueue_post(payload, timesheet_id: nil)
-          @q << Task.new(:post, payload, timesheet_id)
+        def enqueue_create_task(payload)
+          @q << Task.new(:create_task, payload)
         end
 
-        def enqueue_delete(post_id)
-          @q << Task.new(:delete, post_id, nil) if post_id
+        def enqueue_update_task(task_id, payload)
+          @q << Task.new(:update_task, { task_id: task_id, payload: payload }) if task_id
         end
 
-        def drain(limiter:, client:, repo:)
+        def enqueue_delete_task(task_id)
+          @q << Task.new(:delete_task, task_id) if task_id
+        end
+
+        def drain(limiter:, client:)
           return if @draining
 
           @draining = true
-          process_next(limiter, client, repo)
+          process_next(limiter, client)
         end
 
         private
 
-        def process_next(limiter, client, repo)
+        def process_next(limiter, client)
           task = @q.shift
           unless task
             @draining = false
@@ -41,22 +45,17 @@ class QuickbooksTime
 
           limiter.wait_until_allowed do
             case task.action
-            when :post
-              client.post(task.payload) do |res|
-                if task.timesheet_id && (200..299).include?(res.code)
-                  begin
-                    body = JSON.parse(res.body)
-                    post_id = body.dig('posts', 'id')
-                    repo.save_post_id(task.timesheet_id, post_id) if post_id
-                  rescue JSON::ParserError
-                    # ignore
-                  end
-                end
-                add_timeout(proc { process_next(limiter, client, repo) }, 0)
+            when :create_task
+              client.create_task(task.payload) do |_res|
+                add_timeout(proc { process_next(limiter, client) }, 0)
               end
-            when :delete
-              client.delete("posts/#{task.payload}") do |_res|
-                add_timeout(proc { process_next(limiter, client, repo) }, 0)
+            when :update_task
+              client.update_task(task.payload[:task_id], task.payload[:payload]) do |_res|
+                add_timeout(proc { process_next(limiter, client) }, 0)
+              end
+            when :delete_task
+              client.delete_task(task.payload) do |_res|
+                add_timeout(proc { process_next(limiter, client) }, 0)
               end
             end
           end

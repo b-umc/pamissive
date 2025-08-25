@@ -57,6 +57,7 @@ class NonBlockHTML::Server::AuthServer::AuthSession
     @ws = wsock
     @ws.message_handler = method(:on_message)
     send_ping
+    setup_missive_actions # Set up Missive UI actions
     return begin_oauth unless @token&.refresh_token
 
     refresh_token
@@ -77,6 +78,35 @@ class NonBlockHTML::Server::AuthServer::AuthSession
   end
 
   private
+
+  def setup_missive_actions
+    js_code = <<~JS
+      Missive.setActions([{
+        label: 'Open paired thread',
+        contexts: ['comment'],
+        callback: (ctx) => {
+          const socket = event.detail.socketWrapper
+          if (!socket) {
+            console.error('WebSocket not found for Missive action.');
+            return;
+          }
+
+          let payload = { cat: 'ctl', action: 'paired_navigation' };
+
+          if (ctx.comment && ctx.comment.id) {
+            payload.task_id = ctx.comment.id;
+          } else {
+            const cid = ctx.conversation?.id;
+            if (!cid) return;
+            payload.conversation_id = cid;
+          }
+          
+          socket.send(JSON.stringify(payload));
+        }
+      }]);
+    JS
+    @ws.send_js(js_code)
+  end
 
   def send_ping
     @ws.ping

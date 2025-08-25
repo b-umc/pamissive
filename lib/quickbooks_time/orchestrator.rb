@@ -1,23 +1,30 @@
+# frozen_string_literal: true
+
 require_relative 'services/users_syncer'
 require_relative 'services/jobs_syncer'
 require_relative 'services/timesheets_syncer'
-require_relative 'services/missive_backfiller'
-require_relative 'missive/dispatcher'
+require_relative 'services/timesheets_for_missive_creator'
 require_relative 'util/constants'
 require_relative '../../nonblock_socket/select_controller'
-require_relative 'services/users_missive_conversation_creator'
 
 class QuickbooksTime
   include TimeoutInterface
-  attr_reader :qbt, :repos, :cursor, :users_cursor, :jobs_cursor, :queue, :limiter
+  attr_reader :qbt, :repos, :timesheets_cursor, :users_cursor, :jobs_cursor, :queue, :limiter
   attr_accessor :auth
+
+  POLL_METHODS = [
+    :poll_users,
+    :poll_jobs,
+    :poll_timesheets,
+    :process_timesheets_for_missive_tasks
+  ]
 
   POLL_INTERVAL = Constants::QBT_POLL_INTERVAL
 
-  def initialize(qbt:, repos:, cursor:, users_cursor:, jobs_cursor:, queue:, limiter:, auth: nil)
+  def initialize(qbt:, repos:, timesheets_cursor:, users_cursor:, jobs_cursor:, queue:, limiter:, auth: nil)
     @qbt = qbt
     @repos = repos
-    @cursor = cursor
+    @timesheets_cursor = timesheets_cursor
     @users_cursor = users_cursor
     @jobs_cursor = jobs_cursor
     @queue = queue
@@ -31,31 +38,8 @@ class QuickbooksTime
   end
 
   def authorized
-    LOG.info [:quickbooks_time_sync_start]
-    UsersSyncer.new(qbt, repos, users_cursor).run do |ok|
-      if ok
-        JobsSyncer.new(qbt, repos, jobs_cursor).run do |ok2|
-          if ok2
-            # TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |ok3| # [DISABLED]
-            #   if ok3
-            #     MissiveBackfiller.new(repos.timesheets, Constants::MISSIVE_BACKFILL_MONTHS).run
-            #     QuickbooksTime::Missive::Dispatcher.start(queue, limiter, repos.timesheets)
-            #     schedule_polls
-
-            #     LOG.info [:quickbooks_time_sync_complete]
-            #   else
-            #     on_fail(:timesheets)
-            #   end
-            # end
-            LOG.info [:quickbooks_time_sync_complete_minus_timesheets]
-          else
-            on_fail(:jobs)
-          end
-        end
-      else
-        on_fail(:users)
-      end
-    end
+    LOG.info [:quickbooks_time_authorized_starting_poll_cycle]
+    schedule_polls
   end
 
   def auth_url
@@ -69,31 +53,40 @@ class QuickbooksTime
   private
 
   def on_fail(stage)
-    LOG.error [:quickbooks_time_sync_failed, stage]
+    LOG.error [:quickbooks_time_poll_failed, stage]
   end
 
   def schedule_polls
-    add_timeout(proc { poll_users }, POLL_INTERVAL)
-    add_timeout(proc { poll_jobs }, POLL_INTERVAL)
-    # add_timeout(proc { poll_timesheets }, POLL_INTERVAL) # [DISABLED]
+    stagger = POLL_INTERVAL / POLL_METHODS.size
+    POLL_METHODS.each_with_index do |method_name, index|
+      add_timeout(proc { send(method_name) }, stagger * (index + 1))
+    end
   end
 
   def poll_users
-    UsersSyncer.new(qbt, repos, users_cursor).run do |_ok|
-      add_timeout(proc { poll_users }, POLL_INTERVAL)
+    UsersSyncer.new(qbt, repos, users_cursor).run do |ok|
+      on_fail(:users) unless ok
+      add_timeout(method(:poll_users), POLL_INTERVAL)
     end
   end
 
   def poll_jobs
-    JobsSyncer.new(qbt, repos, jobs_cursor).run do |_ok|
-      add_timeout(proc { poll_jobs }, POLL_INTERVAL)
+    JobsSyncer.new(qbt, repos, jobs_cursor).run do |ok|
+      on_fail(:jobs) unless ok
+      add_timeout(method(:poll_jobs), POLL_INTERVAL)
     end
   end
 
-  # def poll_timesheets
-  #   TimesheetsSyncer.new(qbt, repos, cursor).backfill_all do |_ok|
-  #     QuickbooksTime::Missive::Dispatcher.start(queue, limiter, repos.timesheets)
-  #     add_timeout(proc { poll_timesheets }, POLL_INTERVAL)
-  #   end
-  # end
+  def poll_timesheets
+    TimesheetsSyncer.new(qbt, repos, timesheets_cursor).backfill_all do |ok|
+      on_fail(:timesheets) unless ok
+      add_timeout(method(:poll_timesheets), POLL_INTERVAL)
+    end
+  end
+
+  def process_timesheets_for_missive_tasks
+    TimesheetsForMissiveCreator.new(repos).run do
+      add_timeout(method(:process_timesheets_for_missive_tasks), POLL_INTERVAL)
+    end
+  end
 end

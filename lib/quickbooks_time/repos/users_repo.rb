@@ -10,12 +10,13 @@ class UsersRepo
   def upsert(user)
     id = user['id'] || user[:id]
     last_modified = user['last_modified'] || user[:last_modified]
+    tz_offset = user['tz_offset'] || user[:tz_offset]
     res = @db.exec_params('SELECT last_modified FROM quickbooks_time_users WHERE id=$1', [id])
     changed = res.ntuples.zero? || res[0]['last_modified'] != last_modified
     if changed
       @db.exec_params(
-        'INSERT INTO quickbooks_time_users (id, first_name, last_name, username, email, active, last_modified, created, raw)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        'INSERT INTO quickbooks_time_users (id, first_name, last_name, username, email, active, last_modified, created, timezone_offset, raw)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          ON CONFLICT (id) DO UPDATE SET
            first_name=EXCLUDED.first_name,
            last_name=EXCLUDED.last_name,
@@ -24,8 +25,9 @@ class UsersRepo
            active=EXCLUDED.active,
            last_modified=EXCLUDED.last_modified,
            created=EXCLUDED.created,
+           timezone_offset=EXCLUDED.timezone_offset,
            raw=EXCLUDED.raw',
-        [id, user['first_name'], user['last_name'], user['username'], user['email'], user['active'], last_modified, user['created'], user.to_json]
+        [id, user['first_name'], user['last_name'], user['username'], user['email'], user['active'], last_modified, user['created'], tz_offset, user.to_json]
       )
     end
     changed
