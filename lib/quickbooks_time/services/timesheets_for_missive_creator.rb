@@ -57,8 +57,9 @@ class TimesheetsForMissiveCreator
       if response && (200..299).include?(response.code)
         body = JSON.parse(response.body) rescue {}
         task_id = body.dig('tasks', 'id')
+        convo_id = body.dig('tasks', 'links_to_conversation', 0, 'id')
         ts['missive_jobsite_task_id'] = task_id # Update in memory for the next step
-        @repos.timesheets.save_task_id(ts['id'], task_id, :jobsite) if task_id
+        @repos.timesheets.save_task_id(ts['id'], task_id, :jobsite, conversation_id: convo_id) if task_id
       end
       callback.call
     end
@@ -72,8 +73,9 @@ class TimesheetsForMissiveCreator
       if response && (200..299).include?(response.code)
         body = JSON.parse(response.body) rescue {}
         task_id = body.dig('tasks', 'id')
+        convo_id = body.dig('tasks', 'links_to_conversation', 0, 'id')
         ts['missive_user_task_id'] = task_id # Update in memory for the next step
-        @repos.timesheets.save_task_id(ts['id'], task_id, :user) if task_id
+        @repos.timesheets.save_task_id(ts['id'], task_id, :user, conversation_id: convo_id) if task_id
       end
       callback.call
     end
