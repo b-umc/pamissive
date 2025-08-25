@@ -100,6 +100,7 @@ class TimesheetsRepo
   # @return [String, nil] The paired conversation ID or nil if none found.
   def paired_conversation(task_id: nil, conversation_id: nil)
     if task_id
+      task_id = task_id.to_s
       res = @db.exec_params(<<~SQL, [task_id])
         SELECT t.missive_user_task_id, t.missive_jobsite_task_id,
                u.missive_conversation_id AS user_conversation_id,
@@ -111,6 +112,7 @@ class TimesheetsRepo
         LIMIT 1
       SQL
     elsif conversation_id
+      conversation_id = conversation_id.to_s
       res = @db.exec_params(<<~SQL, [conversation_id])
         SELECT t.missive_user_task_id, t.missive_jobsite_task_id,
                u.missive_conversation_id AS user_conversation_id,
@@ -130,11 +132,11 @@ class TimesheetsRepo
     row = res[0]
 
     if task_id
-      return row['jobsite_conversation_id'] if row['missive_user_task_id'] == task_id.to_s
-      return row['user_conversation_id'] if row['missive_jobsite_task_id'] == task_id.to_s
+      return row['jobsite_conversation_id'] if row['missive_user_task_id'] == task_id
+      return row['user_conversation_id'] if row['missive_jobsite_task_id'] == task_id
     else
-      return row['jobsite_conversation_id'] if row['user_conversation_id'] == conversation_id.to_s
-      return row['user_conversation_id'] if row['jobsite_conversation_id'] == conversation_id.to_s
+      return row['jobsite_conversation_id'] if row['user_conversation_id'] == conversation_id
+      return row['user_conversation_id'] if row['jobsite_conversation_id'] == conversation_id
     end
 
     nil
