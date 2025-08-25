@@ -86,9 +86,9 @@ class TimesheetsForMissiveCreator
 
     update_payload = QuickbooksTime::Missive::TaskBuilder.build_task_update_payload(ts)
 
-    update_single_task(ts['missive_jobsite_task_id'], update_payload) do
+    update_single_task(ts, :jobsite, update_payload) do
       @limiter.wait_until_allowed do
-        update_single_task(ts['missive_user_task_id'], update_payload) do
+        update_single_task(ts, :user, update_payload) do
           @repos.timesheets.update_task_state(ts['id'], desired_state)
           callback.call
         end
@@ -96,11 +96,19 @@ class TimesheetsForMissiveCreator
     end
   end
 
-  def update_single_task(task_id, payload, &callback)
+  def update_single_task(ts, type, payload, &callback)
+    task_id = type == :jobsite ? ts['missive_jobsite_task_id'] : ts['missive_user_task_id']
     return callback.call unless task_id
 
     @missive_client.update_task(task_id, payload) do |response|
-      unless response && (200..299).include?(response.code)
+      if response && (200..299).include?(response.code)
+        body = JSON.parse(response.body) rescue {}
+        new_id = body.dig('tasks', 'id')
+        if new_id && new_id != task_id
+          ts["missive_#{type}_task_id"] = new_id
+          @repos.timesheets.save_task_id(ts['id'], new_id, type)
+        end
+      else
         LOG.error [:missive_task_update_failed, task_id, response&.code]
       end
       callback.call
