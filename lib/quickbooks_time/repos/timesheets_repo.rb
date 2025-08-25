@@ -87,4 +87,56 @@ class TimesheetsRepo
     res = @db.exec_params(sql, [date])
     res.map { |r| r }
   end
+
+  # Returns the paired conversation ID for a given task or conversation.
+  # If +task_id+ is provided, it will look up the timesheet that owns that
+  # task and return the conversation ID for the opposite side (user vs
+  # jobsite). If +conversation_id+ is provided, the method returns the
+  # conversation ID for the other party of the most recent timesheet related
+  # to that conversation.
+  #
+  # @param task_id [String] Missive task ID from the comment.
+  # @param conversation_id [String] Missive conversation ID.
+  # @return [String, nil] The paired conversation ID or nil if none found.
+  def paired_conversation(task_id: nil, conversation_id: nil)
+    if task_id
+      res = @db.exec_params(<<~SQL, [task_id])
+        SELECT t.missive_user_task_id, t.missive_jobsite_task_id,
+               u.missive_conversation_id AS user_conversation_id,
+               j.missive_conversation_id AS jobsite_conversation_id
+        FROM quickbooks_time_timesheets t
+        LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
+        LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
+        WHERE t.missive_user_task_id = $1 OR t.missive_jobsite_task_id = $1
+        LIMIT 1
+      SQL
+    elsif conversation_id
+      res = @db.exec_params(<<~SQL, [conversation_id])
+        SELECT t.missive_user_task_id, t.missive_jobsite_task_id,
+               u.missive_conversation_id AS user_conversation_id,
+               j.missive_conversation_id AS jobsite_conversation_id
+        FROM quickbooks_time_timesheets t
+        LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
+        LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
+        WHERE u.missive_conversation_id = $1 OR j.missive_conversation_id = $1
+        ORDER BY t.updated_at DESC
+        LIMIT 1
+      SQL
+    else
+      return nil
+    end
+
+    return nil if res.ntuples.zero?
+    row = res[0]
+
+    if task_id
+      return row['jobsite_conversation_id'] if row['missive_user_task_id'] == task_id.to_s
+      return row['user_conversation_id'] if row['missive_jobsite_task_id'] == task_id.to_s
+    else
+      return row['jobsite_conversation_id'] if row['user_conversation_id'] == conversation_id.to_s
+      return row['user_conversation_id'] if row['jobsite_conversation_id'] == conversation_id.to_s
+    end
+
+    nil
+  end
 end
