@@ -115,7 +115,9 @@ class TimesheetsForMissiveCreator
   end
 
   def extract_conversation_id(body)
-    body.dig('tasks', 'links_to_conversation', 0, 'id') ||
+    body.dig('tasks', 'conversation', 'id') ||
+      body.dig('tasks', 'conversation') ||
+      body.dig('tasks', 'links_to_conversation', 0, 'id') ||
       body.dig('tasks', 'links_to_conversations', 0, 'id')
   end
 end
