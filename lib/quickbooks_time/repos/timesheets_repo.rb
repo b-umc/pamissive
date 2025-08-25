@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'digest/sha1'
+require_relative '../../../logging/app_logger'
+LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 
 class TimesheetsRepo
   def initialize(db:)
@@ -99,6 +101,8 @@ class TimesheetsRepo
   # @param conversation_id [String] Missive conversation ID.
   # @return [String, nil] The paired conversation ID or nil if none found.
   def paired_conversation(task_id: nil, conversation_id: nil)
+    LOG.debug("paired_conversation called with task_id=#{task_id.inspect}, conversation_id=#{conversation_id.inspect}")
+
     if task_id
       task_id = task_id.to_s
       sql = <<~SQL
@@ -111,6 +115,7 @@ class TimesheetsRepo
         WHERE t.missive_user_task_id = $1 OR t.missive_jobsite_task_id = $1
         LIMIT 1
       SQL
+      LOG.debug("paired_conversation task_id SQL param=#{task_id}")
       res = @db.exec_params(sql, [task_id])
     elsif conversation_id
       conversation_id = conversation_id.to_s
@@ -125,13 +130,17 @@ class TimesheetsRepo
         ORDER BY t.updated_at DESC
         LIMIT 1
       SQL
+      LOG.debug("paired_conversation conversation_id SQL param=#{conversation_id}")
       res = @db.exec_params(sql, [conversation_id])
     else
+      LOG.debug('paired_conversation called without task_id or conversation_id')
       return nil
     end
 
+    LOG.debug("paired_conversation query returned ntuples=#{res.ntuples}")
     return nil if res.ntuples.zero?
     row = res[0]
+    LOG.debug("paired_conversation row=#{row.inspect}")
 
     if task_id
       return row['jobsite_conversation_id'] if row['missive_user_task_id'] == task_id
