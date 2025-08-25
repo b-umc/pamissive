@@ -93,8 +93,8 @@ class NonBlockHTML::Server::AuthServer::AuthSession
 
           let payload = { cat: 'ctl', action: 'paired_navigation' };
 
-          if (ctx.comment && ctx.comment.id) {
-            payload.task_id = ctx.comment.id;
+          if (ctx.comment && ctx.comment.task && ctx.comment.task.id) {
+            payload.task_id = ctx.comment.task.id;
           } else {
             const cid = ctx.conversation?.id;
             if (!cid) return;

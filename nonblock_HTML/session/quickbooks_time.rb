@@ -49,6 +49,19 @@ class NonBlockHTML::Server::Session::QuickbooksTime
     end
   end
 
+  # Navigates to the paired Missive conversation for a given task or
+  # conversation. Triggered via a Missive action and relayed through the main
+  # session controller.
+  # @param data [Hash] Includes either 'task_id' or 'conversation_id'.
+  def paired_navigation(data)
+    repo = QBT.repos.timesheets
+    target_conv = repo.paired_conversation(task_id: data['task_id'],
+                                           conversation_id: data['conversation_id'])
+    return unless target_conv
+
+    send_js(%[Missive.navigate({ conversationId: '#{target_conv}' });])
+  end
+
   def connection_card
     return QBT_DISCONNECTED unless @state[:authorized]
 

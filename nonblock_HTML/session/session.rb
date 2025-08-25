@@ -342,6 +342,7 @@ class NonBlockHTML::Server::Session
     when 'logout' then clear_session
     when 'toggle_google_drive' then toggle_google_drive
     when 'toggle_quickbooks_time' then @system['quickbooks_time'].clicked
+    when 'paired_navigation' then @system['quickbooks_time'].paired_navigation(data)
     when 'click_away' then click_away
     else
       LOG.debug([:unknown_action_session_request_from_ws, data, ])

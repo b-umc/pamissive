@@ -66,11 +66,13 @@ class QuickbooksTime
         (has_end_time || has_duration) ? 'closed' : 'in_progress'
       end
 
-      def self.build_task_creation_payload(ts, references:, subject:)
+      def self.build_task_creation_payload(ts, references:, subject:, conversation_id: nil)
         start_t, end_t = compute_times(ts)
         state = determine_task_state(ts)
         due_date = end_t || (start_t ? start_t + 28800 : Time.now + 28800)
-        
+
+        links = conversation_id ? { links_to_conversation: [{ id: conversation_id }] } : {}
+
         {
           tasks: {
             references: references,
@@ -81,20 +83,22 @@ class QuickbooksTime
             subtask: true,
             team: ENV.fetch('QBT_TIMESHEETS_TEAM', nil),
             organization: ENV.fetch('MISSIVE_ORG_ID', nil)
-          }.compact
+          }.merge(links).compact
         }
       end
 
       def self.build_jobsite_task_creation_payload(ts)
         job_id = ts['quickbooks_time_jobsite_id']
         job_name = ts['jobsite_name']
-        build_task_creation_payload(ts, references: ["qbt:job:#{job_id}"], subject: "QuickBooks Time: #{job_name}")
+        convo_id = ts['jobsite_conversation_id']
+        build_task_creation_payload(ts, references: ["qbt:job:#{job_id}"], subject: "QuickBooks Time: #{job_name}", conversation_id: convo_id)
       end
 
       def self.build_user_task_creation_payload(ts)
         user_id = ts['user_id']
         user_name = ts['user_name']
-        build_task_creation_payload(ts, references: ["qbt:user:#{user_id}"], subject: "QuickBooks Time: #{user_name}")
+        convo_id = ts['user_conversation_id']
+        build_task_creation_payload(ts, references: ["qbt:user:#{user_id}"], subject: "QuickBooks Time: #{user_name}", conversation_id: convo_id)
       end
 
       def self.build_task_update_payload(ts)

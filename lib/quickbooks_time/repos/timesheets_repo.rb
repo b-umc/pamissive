@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'digest/sha1'
+require_relative '../../../logging/app_logger'
+LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 
 class TimesheetsRepo
   def initialize(db:)
@@ -58,9 +60,20 @@ class TimesheetsRepo
     end
   end
 
-  def save_task_id(id, task_id, type)
-    column = type == :user ? 'missive_user_task_id' : 'missive_jobsite_task_id'
-    @db.exec_params("UPDATE quickbooks_time_timesheets SET #{column}=$1, updated_at=now() WHERE id=$2", [task_id, id])
+  def save_task_id(id, task_id, type, conversation_id: nil)
+    task_column = type == :user ? 'missive_user_task_id' : 'missive_jobsite_task_id'
+    convo_column = type == :user ? 'missive_user_task_conversation_id' : 'missive_jobsite_task_conversation_id'
+    if conversation_id
+      @db.exec_params(
+        "UPDATE quickbooks_time_timesheets SET #{task_column}=$1, #{convo_column}=$2, updated_at=now() WHERE id=$3",
+        [task_id, conversation_id, id]
+      )
+    else
+      @db.exec_params(
+        "UPDATE quickbooks_time_timesheets SET #{task_column}=$1, updated_at=now() WHERE id=$2",
+        [task_id, id]
+      )
+    end
   end
   
   def update_task_state(id, state)
@@ -86,5 +99,61 @@ class TimesheetsRepo
     SQL
     res = @db.exec_params(sql, [date])
     res.map { |r| r }
+  end
+
+  # Returns the paired conversation ID for a given task or conversation.
+  # If +task_id+ is provided, it will look up the timesheet that owns that
+  # task and return the conversation ID for the opposite side (user vs
+  # jobsite). If +conversation_id+ is provided, the method returns the
+  # conversation ID for the other party of the most recent timesheet related
+  # to that conversation.
+  #
+  # @param task_id [String] Missive task ID from the comment.
+  # @param conversation_id [String] Missive conversation ID.
+  # @return [String, nil] The paired conversation ID or nil if none found.
+  def paired_conversation(task_id: nil, conversation_id: nil)
+    LOG.debug("paired_conversation called with task_id=#{task_id.inspect}, conversation_id=#{conversation_id.inspect}")
+
+    if task_id
+      task_id = task_id.to_s
+      sql = <<~SQL
+        SELECT missive_user_task_id, missive_jobsite_task_id,
+               missive_user_task_conversation_id, missive_jobsite_task_conversation_id
+        FROM quickbooks_time_timesheets
+        WHERE missive_user_task_id = $1 OR missive_jobsite_task_id = $1
+        LIMIT 1
+      SQL
+      LOG.debug("paired_conversation task_id SQL param=#{task_id}")
+      res = @db.exec_params(sql, [task_id])
+    elsif conversation_id
+      conversation_id = conversation_id.to_s
+      sql = <<~SQL
+        SELECT missive_user_task_conversation_id, missive_jobsite_task_conversation_id
+        FROM quickbooks_time_timesheets
+        WHERE missive_user_task_conversation_id = $1 OR missive_jobsite_task_conversation_id = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+      SQL
+      LOG.debug("paired_conversation conversation_id SQL param=#{conversation_id}")
+      res = @db.exec_params(sql, [conversation_id])
+    else
+      LOG.debug('paired_conversation called without task_id or conversation_id')
+      return nil
+    end
+
+    LOG.debug("paired_conversation query returned ntuples=#{res.ntuples}")
+    return nil if res.ntuples.zero?
+    row = res[0]
+    LOG.debug("paired_conversation row=#{row.inspect}")
+
+    if task_id
+      return row['missive_jobsite_task_conversation_id'] if row['missive_user_task_id'] == task_id
+      return row['missive_user_task_conversation_id'] if row['missive_jobsite_task_id'] == task_id
+    else
+      return row['missive_jobsite_task_conversation_id'] if row['missive_user_task_conversation_id'] == conversation_id
+      return row['missive_user_task_conversation_id'] if row['missive_jobsite_task_conversation_id'] == conversation_id
+    end
+
+    nil
   end
 end
