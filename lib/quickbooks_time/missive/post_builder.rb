@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'time'
+require 'json' # Required for hx-vals
 require_relative '../util/constants'
 require_relative '../util/format'
 
@@ -77,17 +78,13 @@ class QuickbooksTime
         [start_t, end_t]
       end
 
-      def self.timesheet_event(ts)
+      def self.build_jobsite_post(ts)
         start_t, end_t = compute_times(ts)
         base_md = Templates.timesheet_markdown(ts, start_t, end_t)
 
         job_id    = ts['quickbooks_time_jobsite_id'] || ts['jobcode_id']
-        user_id   = ts['user_id']
         job_name  = ts['jobsite_name'] || JobName.lookup(job_id)
-        user_name = ts['user_name'] || UserName.lookup(user_id)
-
-        job_md  = base_md + "\nTech thread: [#{user_name}](ref:qbt:user:#{user_id},qbt:job:#{job_id})"
-        tech_md = base_md + "\nJob thread: [#{job_name}](ref:qbt:job:#{job_id})"
+        user_name = ts['user_name'] || UserName.lookup(ts['user_id'])
 
         team = ENV.fetch('QBT_POST_TEAM', nil)
         org  = ENV.fetch('MISSIVE_ORG_ID', nil) if team
@@ -100,25 +97,43 @@ class QuickbooksTime
           add_to_team_inbox: false
         }
 
-        job_post = {
+        {
           posts: common.merge(
             references: ["qbt:job:#{job_id}"],
             conversation_subject: "QuickBooks Time: #{job_name}",
-            notification: { title: "Timesheet • #{user_name}", body: ::Util::Format.notif_from_md(job_md) },
-            attachments: [{ markdown: job_md, timestamp: end_t.to_i, color: Colors.for(ts) }]
+            notification: { title: "Timesheet • #{user_name}", body: ::Util::Format.notif_from_md(base_md) },
+            attachments: [{ markdown: base_md, timestamp: end_t.to_i, color: Colors.for(ts) }]
           )
         }
+      end
 
-        tech_post = {
+      def self.build_user_post(ts, _jobsite_conversation_id)
+        start_t, end_t = compute_times(ts)
+        base_md = Templates.timesheet_markdown(ts, start_t, end_t)
+
+        user_id   = ts['user_id']
+        job_name  = ts['jobsite_name'] || JobName.lookup(ts['quickbooks_time_jobsite_id'] || ts['jobcode_id'])
+        user_name = ts['user_name'] || UserName.lookup(user_id)
+
+        team = ENV.fetch('QBT_POST_TEAM', nil)
+        org  = ENV.fetch('MISSIVE_ORG_ID', nil) if team
+        common = {
+          username: 'QuickBooks Time',
+          team: team,
+          force_team: !team.nil?,
+          organization: org,
+          add_to_inbox: false,
+          add_to_team_inbox: false
+        }
+
+        {
           posts: common.merge(
-            references: ["qbt:user:#{user_id}", "qbt:job:#{job_id}"],
+            references: ["qbt:user:#{user_id}"],
             conversation_subject: "QuickBooks Time: #{user_name}",
-            notification: { title: "Timesheet • #{job_name}", body: ::Util::Format.notif_from_md(tech_md) },
-            attachments: [{ markdown: tech_md, timestamp: end_t.to_i, color: Colors.for(ts) }]
+            notification: { title: "Timesheet • #{job_name}", body: ::Util::Format.notif_from_md(base_md) },
+            attachments: [{ markdown: base_md, timestamp: end_t.to_i, color: Colors.for(ts) }]
           )
         }
-
-        [job_post, tech_post]
       end
 
       def self.overview(job_id, md, status_color)

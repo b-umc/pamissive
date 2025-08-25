@@ -7,7 +7,9 @@ class QuickbooksTime
 
       def ensure!(conn, rebuild_timesheets: false)
         create_users(conn)
+        ensure_users_columns(conn)
         create_jobs(conn)
+        ensure_jobs_columns(conn)
         create_sync_logs(conn)
 
         if rebuild_timesheets
@@ -31,8 +33,16 @@ class QuickbooksTime
             last_modified TIMESTAMPTZ,
             created TIMESTAMPTZ,
             missive_conversation_id TEXT,
+            timezone_offset INT,
             raw JSONB
           );
+        SQL
+      end
+
+      def ensure_users_columns(conn)
+        conn.exec(<<~SQL)
+          ALTER TABLE quickbooks_time_users
+            ADD COLUMN IF NOT EXISTS timezone_offset INT;
         SQL
       end
 
@@ -57,6 +67,13 @@ class QuickbooksTime
         SQL
       end
 
+      def ensure_jobs_columns(conn)
+        conn.exec(<<~SQL)
+          ALTER TABLE quickbooks_time_jobs
+            ADD COLUMN IF NOT EXISTS missive_conversation_id TEXT;
+        SQL
+      end
+
       def create_timesheets(conn)
         conn.exec(<<~SQL)
           CREATE TABLE IF NOT EXISTS quickbooks_time_timesheets (
@@ -70,7 +87,9 @@ class QuickbooksTime
             billed BOOLEAN NOT NULL DEFAULT false,
             billed_invoice_id TEXT,
             entry_type TEXT,
-            missive_post_id TEXT,
+            missive_user_task_id TEXT,
+            missive_jobsite_task_id TEXT,
+            missive_task_state TEXT,
             start_time TIMESTAMPTZ,
             end_time TIMESTAMPTZ,
             created_qbt TIMESTAMPTZ,
@@ -108,11 +127,17 @@ class QuickbooksTime
         conn.exec(<<~SQL)
           ALTER TABLE quickbooks_time_timesheets
             ADD COLUMN IF NOT EXISTS entry_type TEXT,
-            ADD COLUMN IF NOT EXISTS missive_post_id TEXT,
+            ADD COLUMN IF NOT EXISTS missive_user_task_id TEXT,
+            ADD COLUMN IF NOT EXISTS missive_jobsite_task_id TEXT,
+            ADD COLUMN IF NOT EXISTS missive_task_state TEXT,
             ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ,
             ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ,
             ADD COLUMN IF NOT EXISTS created_qbt TIMESTAMPTZ,
             ADD COLUMN IF NOT EXISTS modified_qbt TIMESTAMPTZ;
+          ALTER TABLE quickbooks_time_timesheets
+            DROP COLUMN IF EXISTS missive_post_id,
+            DROP COLUMN IF EXISTS missive_user_post_id,
+            DROP COLUMN IF EXISTS missive_jobsite_post_id;
         SQL
       end
 

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative '../missive/post_builder'
+require_relative '../missive/task_builder'
 require_relative '../missive/queue'
 require_relative '../streams/timesheet_stream'
 require_relative 'overview_refresher'
@@ -18,17 +18,20 @@ class TimesheetsSyncer
     @stream.each_batch(proc do |rows|
       rows.sort_by! { |ts| QuickbooksTime::Missive::PostBuilder.compute_times(ts).last || Time.at(0) }
       rows.each do |ts|
-        changed, old_post_id = @ts_repo.upsert(ts)
+        changed, old_task_ids = @ts_repo.upsert(ts)
         next unless changed
 
-        ts['jobsite_name'] ||= @jobs_repo.name(ts['jobcode_id'] || ts['quickbooks_time_jobsite_id'])
-        ts['user_name']    ||= @users_repo.name(ts['user_id'])
-
         touched[ts['jobcode_id']] = true
-        QuickbooksTime::Missive::Queue.enqueue_delete(old_post_id) if old_post_id
-        payloads = QuickbooksTime::Missive::PostBuilder.timesheet_event(ts)
-        Array(payloads).each do |payload|
-          QuickbooksTime::Missive::Queue.enqueue_post(payload, timesheet_id: ts['id'])
+        
+        # If old task IDs exist, this is an update, not a delete/recreate.
+        if old_task_ids && !old_task_ids.empty?
+          ts['user_name'] ||= @users_repo.name(ts['user_id'])
+          ts['jobsite_name'] ||= @jobs_repo.name(ts['jobcode_id'])
+          
+          update_payload = QuickbooksTime::Missive::TaskBuilder.build_task_update_payload(ts)
+          
+          QuickbooksTime::Missive::Queue.enqueue_update_task(old_task_ids[:user_task_id], update_payload)
+          QuickbooksTime::Missive::Queue.enqueue_update_task(old_task_ids[:jobsite_task_id], update_payload)
         end
       end
     end) do |ok|

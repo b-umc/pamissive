@@ -6,8 +6,7 @@ require 'securerandom'
 require_relative '../api/google/google_auth'
 require_relative 'auth_session'
 require_relative '../nonblock_socket/select_controller'
-
-module NonBlockHTML; end
+require_relative '../env/token_manager' # Ensure DB is loaded
 
 class NonBlockHTML::Server; end
 

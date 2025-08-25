@@ -1,5 +1,4 @@
-# # frozen_string_literal: true
-
+# frozen_string_literal: true
 
 require 'pg'
 require 'envkey'
@@ -20,7 +19,6 @@ TABLES_TO_DROP = %w[
   quickbooks_time_backfill_status
   quickbooks_time_jobsite_conversations
   quickbooks_time_timesheet_posts
-  quickbooks_time_timesheets
   quickbooks_time_overview_state
 ].freeze
 
@@ -40,8 +38,21 @@ begin
     puts "   ...Done. '#{table_name}' has been removed."
   end
 
+  puts "-> Resetting Missive conversation IDs in 'quickbooks_time_users'..."
+  conn.exec("UPDATE quickbooks_time_users SET missive_conversation_id = NULL;")
+  puts "   ...Done."
+
+  puts "-> Resetting Missive conversation IDs in 'quickbooks_time_jobs'..."
+  conn.exec("UPDATE quickbooks_time_jobs SET missive_conversation_id = NULL;")
+  puts "   ...Done."
+
+  puts "-> Truncating 'quickbooks_time_timesheets' to clear old data..."
+  conn.exec("TRUNCATE TABLE quickbooks_time_timesheets RESTART IDENTITY;")
+  puts "   ...Done."
+
+
   puts "\n✅ Database cleanup complete."
-  puts "You can now restart the main application to create and use the new schema."
+  puts "You can now restart the main application for a fresh sync."
 
 rescue PG::Error => e
   puts "\n❌ A database error occurred:"
