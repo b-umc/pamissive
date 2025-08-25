@@ -101,7 +101,7 @@ class TimesheetsRepo
   def paired_conversation(task_id: nil, conversation_id: nil)
     if task_id
       task_id = task_id.to_s
-      res = @db.exec_params(<<~SQL, [task_id])
+      sql = <<~SQL
         SELECT t.missive_user_task_id, t.missive_jobsite_task_id,
                u.missive_conversation_id AS user_conversation_id,
                j.missive_conversation_id AS jobsite_conversation_id
@@ -111,9 +111,10 @@ class TimesheetsRepo
         WHERE t.missive_user_task_id = $1 OR t.missive_jobsite_task_id = $1
         LIMIT 1
       SQL
+      res = @db.exec_params(sql, [task_id])
     elsif conversation_id
       conversation_id = conversation_id.to_s
-      res = @db.exec_params(<<~SQL, [conversation_id])
+      sql = <<~SQL
         SELECT t.missive_user_task_id, t.missive_jobsite_task_id,
                u.missive_conversation_id AS user_conversation_id,
                j.missive_conversation_id AS jobsite_conversation_id
@@ -124,6 +125,7 @@ class TimesheetsRepo
         ORDER BY t.updated_at DESC
         LIMIT 1
       SQL
+      res = @db.exec_params(sql, [conversation_id])
     else
       return nil
     end
