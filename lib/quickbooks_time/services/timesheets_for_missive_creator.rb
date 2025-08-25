@@ -4,6 +4,9 @@ require_relative '../missive/client'
 require_relative '../missive/task_builder'
 require_relative '../rate_limiter'
 require_relative '../util/constants'
+require_relative '../../../logging/app_logger'
+
+LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 
 class TimesheetsForMissiveCreator
   def initialize(repos)
@@ -57,7 +60,8 @@ class TimesheetsForMissiveCreator
       if response && (200..299).include?(response.code)
         body = JSON.parse(response.body) rescue {}
         task_id = body.dig('tasks', 'id')
-        convo_id = body.dig('tasks', 'links_to_conversation', 0, 'id')
+        convo_id = extract_conversation_id(body)
+        LOG.debug [:missive_task_created, :jobsite, task_id, convo_id]
         ts['missive_jobsite_task_id'] = task_id # Update in memory for the next step
         @repos.timesheets.save_task_id(ts['id'], task_id, :jobsite, conversation_id: convo_id) if task_id
       end
@@ -73,7 +77,8 @@ class TimesheetsForMissiveCreator
       if response && (200..299).include?(response.code)
         body = JSON.parse(response.body) rescue {}
         task_id = body.dig('tasks', 'id')
-        convo_id = body.dig('tasks', 'links_to_conversation', 0, 'id')
+        convo_id = extract_conversation_id(body)
+        LOG.debug [:missive_task_created, :user, task_id, convo_id]
         ts['missive_user_task_id'] = task_id # Update in memory for the next step
         @repos.timesheets.save_task_id(ts['id'], task_id, :user, conversation_id: convo_id) if task_id
       end
@@ -107,5 +112,10 @@ class TimesheetsForMissiveCreator
       end
       callback.call
     end
+  end
+
+  def extract_conversation_id(body)
+    body.dig('tasks', 'links_to_conversation', 0, 'id') ||
+      body.dig('tasks', 'links_to_conversations', 0, 'id')
   end
 end
