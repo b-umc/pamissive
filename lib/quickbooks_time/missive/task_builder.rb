@@ -81,6 +81,7 @@ class QuickbooksTime
             description: build_task_description(ts, start_t, end_t),
             due_at: due_date.to_i,
             subtask: true,
+						state: state,
             team: ENV.fetch('QBT_TIMESHEETS_TEAM', nil),
             organization: ENV.fetch('MISSIVE_ORG_ID', nil)
           }.merge(links).compact

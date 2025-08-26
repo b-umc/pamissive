@@ -1,5 +1,3 @@
-# frozen_string_literal: true
-
 require 'digest/sha1'
 require_relative '../../../logging/app_logger'
 LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
