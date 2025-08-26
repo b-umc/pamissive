@@ -80,7 +80,7 @@ class TimesheetsRepo
     @db.exec_params("UPDATE quickbooks_time_timesheets SET missive_task_state=$1, updated_at=now() WHERE id=$2", [state, id])
   end
 
-  def tasks_to_create_or_update(date)
+  def tasks_to_create_or_update(start_date = nil)
     sql = <<~SQL
       SELECT t.*, j.name AS jobsite_name,
              (u.first_name || ' ' || u.last_name) AS user_name,
@@ -90,14 +90,28 @@ class TimesheetsRepo
       FROM quickbooks_time_timesheets t
       LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
       LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
-      WHERE t.date >= $1 AND (
-        t.missive_user_task_id IS NULL OR 
+    SQL
+
+    where_clauses = []
+    params = []
+
+    if start_date
+      where_clauses << "t.date >= $#{params.length + 1}"
+      params << start_date
+    end
+
+    where_clauses << <<~SQL.strip
+      (
+        t.missive_user_task_id IS NULL OR
         t.missive_jobsite_task_id IS NULL OR
         t.missive_task_state != (CASE WHEN (t.end_time IS NOT NULL OR t.duration_seconds > 0) THEN 'closed' ELSE 'in_progress' END)
       )
-      ORDER BY t.date ASC, t.start_time ASC
     SQL
-    res = @db.exec_params(sql, [date])
+
+    sql << " WHERE #{where_clauses.join(' AND ')}" unless where_clauses.empty?
+    sql << " ORDER BY t.date ASC, t.start_time ASC"
+
+    res = params.empty? ? @db.exec(sql) : @db.exec_params(sql, params)
     res.map { |r| r }
   end
 

@@ -16,8 +16,14 @@ class TimesheetsForMissiveCreator
   end
 
   def run(&callback)
-    # This query now finds all timesheets that either need tasks created OR need their state updated.
-    timesheets_to_process = @repos.timesheets.tasks_to_create_or_update(Date.today << Constants::MISSIVE_BACKFILL_MONTHS)
+    # Determine the starting date for backfilling. If MISSIVE_BACKFILL_MONTHS
+    # is set to a positive value, we limit the query to timesheets on or after
+    # that date. Otherwise, we look at all timesheets regardless of date.
+    start_date = if Constants::MISSIVE_BACKFILL_MONTHS.positive?
+                   Date.today << Constants::MISSIVE_BACKFILL_MONTHS
+                 end
+
+    timesheets_to_process = @repos.timesheets.tasks_to_create_or_update(start_date)
     
     process_next_timesheet = proc do
       if timesheets_to_process.empty?
