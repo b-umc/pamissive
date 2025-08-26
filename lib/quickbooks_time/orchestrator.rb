@@ -15,8 +15,8 @@ class QuickbooksTime
   POLL_METHODS = [
     :poll_users,
     :poll_jobs,
-    :poll_timesheets,
-    :process_timesheets_for_missive_tasks
+    :poll_timesheets #,
+    #:process_timesheets_for_missive_tasks
   ]
 
   POLL_INTERVAL = Constants::QBT_POLL_INTERVAL

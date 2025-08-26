@@ -4,6 +4,9 @@ require_relative '../missive/client'
 require_relative '../missive/task_builder'
 require_relative '../rate_limiter'
 require_relative '../util/constants'
+require_relative '../../../logging/app_logger'
+
+LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 
 class TimesheetsForMissiveCreator
   def initialize(repos)
@@ -13,8 +16,14 @@ class TimesheetsForMissiveCreator
   end
 
   def run(&callback)
-    # This query now finds all timesheets that either need tasks created OR need their state updated.
-    timesheets_to_process = @repos.timesheets.tasks_to_create_or_update(Date.today << Constants::MISSIVE_BACKFILL_MONTHS)
+    # Determine the starting date for backfilling. If MISSIVE_BACKFILL_MONTHS
+    # is set to a positive value, we limit the query to timesheets on or after
+    # that date. Otherwise, we look at all timesheets regardless of date.
+    start_date = if Constants::MISSIVE_BACKFILL_MONTHS.positive?
+                   Date.today << Constants::MISSIVE_BACKFILL_MONTHS
+                 end
+
+    timesheets_to_process = @repos.timesheets.tasks_to_create_or_update(start_date)
     
     process_next_timesheet = proc do
       if timesheets_to_process.empty?
@@ -57,8 +66,10 @@ class TimesheetsForMissiveCreator
       if response && (200..299).include?(response.code)
         body = JSON.parse(response.body) rescue {}
         task_id = body.dig('tasks', 'id')
+        convo_id = body.dig('tasks', 'conversation')
+        LOG.debug [:missive_task_created, :jobsite, task_id, convo_id]
         ts['missive_jobsite_task_id'] = task_id # Update in memory for the next step
-        @repos.timesheets.save_task_id(ts['id'], task_id, :jobsite) if task_id
+        @repos.timesheets.save_task_id(ts['id'], task_id, :jobsite, conversation_id: convo_id) if task_id
       end
       callback.call
     end
@@ -72,8 +83,10 @@ class TimesheetsForMissiveCreator
       if response && (200..299).include?(response.code)
         body = JSON.parse(response.body) rescue {}
         task_id = body.dig('tasks', 'id')
+        convo_id = body.dig('tasks', 'conversation')
+        LOG.debug [:missive_task_created, :user, task_id, convo_id]
         ts['missive_user_task_id'] = task_id # Update in memory for the next step
-        @repos.timesheets.save_task_id(ts['id'], task_id, :user) if task_id
+        @repos.timesheets.save_task_id(ts['id'], task_id, :user, conversation_id: convo_id) if task_id
       end
       callback.call
     end

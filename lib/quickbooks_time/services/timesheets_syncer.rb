@@ -16,7 +16,7 @@ class TimesheetsSyncer
   def backfill_all(&done)
     touched = {}
     @stream.each_batch(proc do |rows|
-      rows.sort_by! { |ts| QuickbooksTime::Missive::PostBuilder.compute_times(ts).last || Time.at(0) }
+      rows.sort_by! { |ts| QuickbooksTime::Missive::TaskBuilder.compute_times(ts).last || Time.at(0) }
       rows.each do |ts|
         changed, old_task_ids = @ts_repo.upsert(ts)
         next unless changed
