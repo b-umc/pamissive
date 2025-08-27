@@ -97,7 +97,8 @@ class QuickbooksTime
             created_qbt TIMESTAMPTZ,
             modified_qbt TIMESTAMPTZ,
             created_at TIMESTAMPTZ DEFAULT now(),
-            updated_at TIMESTAMPTZ DEFAULT now()
+            updated_at TIMESTAMPTZ DEFAULT now(),
+            on_the_clock BOOLEAN
           );
         SQL
       end
@@ -137,7 +138,8 @@ class QuickbooksTime
             ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ,
             ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ,
             ADD COLUMN IF NOT EXISTS created_qbt TIMESTAMPTZ,
-            ADD COLUMN IF NOT EXISTS modified_qbt TIMESTAMPTZ;
+            ADD COLUMN IF NOT EXISTS modified_qbt TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS on_the_clock boolean;;
           ALTER TABLE quickbooks_time_timesheets
             DROP COLUMN IF EXISTS missive_post_id,
             DROP COLUMN IF EXISTS missive_user_post_id,
