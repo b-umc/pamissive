@@ -16,12 +16,12 @@ class QuickbooksTime
       end
 
       def create_and_ensure!(payload, desired, ts_id, &done)
-        @client.post('/v1/tasks', json: { tasks: payload }) do |status, _hdrs, json|
+        @client.create_task(payload) do |status, _hdrs, json|
           task = (200..299).include?(status) ? json&.dig('tasks') : nil
           return done.call(nil) unless task
           return done.call(task) if task['state'] == desired
           LOG.debug([:task_state, ts_id, :from, task['state'], :to, desired])
-          @client.patch("/v1/tasks/#{task['id']}", json: { tasks: { state: desired } }) do |_s2, _h2, j2|
+          @client.update_task(task['id'], { tasks: { state: desired } }) do |_s2, _h2, j2|
             done.call(j2&.dig('tasks'))
           end
         end

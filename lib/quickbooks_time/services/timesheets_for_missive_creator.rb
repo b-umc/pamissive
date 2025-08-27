@@ -2,7 +2,7 @@
 
 require_relative '../missive/task_builder'
 require_relative '../missive/task_sync'
-require_relative '../missive/http_client'
+require_relative '../missive/client'
 require_relative '../util/constants'
 require_relative '../../../logging/app_logger'
 
@@ -11,7 +11,7 @@ LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 class TimesheetsForMissiveCreator
   def initialize(repos)
     @repos = repos
-    client = QuickbooksTime::Missive::HttpClient.new
+    client = QuickbooksTime::Missive::Client.new
     @task_sync = QuickbooksTime::Missive::TaskSync.new(client: client)
   end
 
