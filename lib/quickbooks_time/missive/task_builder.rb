@@ -153,7 +153,7 @@ class QuickbooksTime
         {
           tasks: {
             references: references,
-            conversation_subject: subject,
+            subject: subject,
             title: build_task_title(ts),
             description: build_task_description(ts, start_t, end_t),
             due_at: due_date.to_i,
@@ -167,21 +167,17 @@ class QuickbooksTime
       def self.build_jobsite_task_creation_payload(ts)
         job_id   = ts['quickbooks_time_jobsite_id']
         job_name = ts['jobsite_name']
-        convo_id = ts['jobsite_conversation_id']
         build_task_creation_payload(ts,
           references: ["qbt:job:#{job_id}"],
-          subject: "QuickBooks Time: #{job_name}",
-          conversation_id: convo_id)
+          subject: "QuickBooks Time: #{job_name}")
       end
 
       def self.build_user_task_creation_payload(ts)
         user_id  = ts['user_id']
         user_name = ts['user_name']
-        convo_id = ts['user_conversation_id']
         build_task_creation_payload(ts,
           references: ["qbt:user:#{user_id}"],
-          subject: "QuickBooks Time: #{user_name}",
-          conversation_id: convo_id)
+          subject: "QuickBooks Time: #{user_name}")
       end
 
       def self.build_task_update_payload(ts)

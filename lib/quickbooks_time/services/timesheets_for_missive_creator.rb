@@ -37,14 +37,13 @@ class TimesheetsForMissiveCreator
   private
 
   def process_one_timesheet(ts, &callback)
-    start_t, end_t = QuickbooksTime::Missive::TaskBuilder.compute_times(ts)
-    title = QuickbooksTime::Missive::TaskBuilder.build_task_title(ts)
-    desc  = QuickbooksTime::Missive::TaskBuilder.build_task_description(ts, start_t, end_t)
+    user_payload = QuickbooksTime::Missive::TaskBuilder.build_user_task_creation_payload(ts)[:tasks]
+    job_payload  = QuickbooksTime::Missive::TaskBuilder.build_jobsite_task_creation_payload(ts)[:tasks]
 
     @task_sync.sync_pair!(
       ts: ts,
-      titles:       { user: title, jobsite: title },
-      descriptions: { user: desc, jobsite: desc }
+      user_payload: user_payload,
+      job_payload:  job_payload
     ) do |tasks|
       if tasks[:user]
         @repos.timesheets.set_user_task!(
