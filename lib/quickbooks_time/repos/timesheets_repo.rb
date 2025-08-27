@@ -102,12 +102,17 @@ class TimesheetsRepo
       (
         t.missive_user_task_id IS NULL OR
         t.missive_jobsite_task_id IS NULL OR
-        t.missive_task_state != (CASE WHEN (t.end_time IS NOT NULL OR t.duration_seconds > 0) THEN 'closed' ELSE 'in_progress' END)
+        t.missive_task_state IS DISTINCT FROM
+           (CASE
+             WHEN (t.end_time IS NOT NULL OR t.duration_seconds > 0)
+               THEN 'closed'
+             ELSE 'in_progress'
+           END)
       )
     SQL
 
     sql << " WHERE #{where_clauses.join(' AND ')}" unless where_clauses.empty?
-    sql << " ORDER BY t.date ASC, t.start_time ASC"
+    sql << " ORDER BY t.date ASC, COALESCE(t.start_time, t.created_qbt) ASC"
 
     res = params.empty? ? @db.exec(sql) : @db.exec_params(sql, params)
     res.map { |r| r }
