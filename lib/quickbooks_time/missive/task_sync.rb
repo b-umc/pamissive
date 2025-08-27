@@ -3,7 +3,7 @@
 require_relative '../../../logging/app_logger'
 LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 
-module QuickbooksTime
+class QuickbooksTime
   module Missive
     class TaskSync
       def initialize(client:)

@@ -5,7 +5,7 @@ require_relative '../../../api/missive/missive'
 require_relative '../../../nonblock_HTTP/client/session'
 require_relative '../../../nonblock_socket/select_controller'
 
-module QuickbooksTime
+class QuickbooksTime
   module Missive
     class HttpClient
       include TimeoutInterface
