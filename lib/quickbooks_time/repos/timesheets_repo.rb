@@ -79,13 +79,13 @@ class TimesheetsRepo
     @db.exec_params("UPDATE quickbooks_time_timesheets SET missive_task_state=$1, updated_at=now() WHERE id=$2", [state, id])
   end
 
-  def set_user_task!(id, task_id, state)
-    save_task_id(id, task_id, :user)
+  def set_user_task!(id, task_id, state, conversation_id = nil)
+    save_task_id(id, task_id, :user, conversation_id: conversation_id)
     update_task_state(id, state)
   end
 
-  def set_job_task!(id, task_id, state)
-    save_task_id(id, task_id, :jobsite)
+  def set_job_task!(id, task_id, state, conversation_id = nil)
+    save_task_id(id, task_id, :jobsite, conversation_id: conversation_id)
     update_task_state(id, state)
   end
 
@@ -93,8 +93,6 @@ class TimesheetsRepo
     sql = <<~SQL
       SELECT t.*, j.name AS jobsite_name,
              (u.first_name || ' ' || u.last_name) AS user_name,
-             u.missive_conversation_id AS user_conversation_id,
-             j.missive_conversation_id AS jobsite_conversation_id,
              u.timezone_offset AS user_tz_offset
       FROM quickbooks_time_timesheets t
       LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id

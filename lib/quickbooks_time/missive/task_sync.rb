@@ -27,16 +27,16 @@ class QuickbooksTime
         end
       end
 
-      def sync_pair!(ts:, user_conv_id:, job_conv_id:, titles:, descriptions:, &done)
+      def sync_pair!(ts:, titles:, descriptions:, &done)
         desired = desired_state(ts[:on_the_clock] || ts['on_the_clock'])
 
         user_payload = {
           title: titles[:user], description: descriptions[:user].to_s,
-          conversation: user_conv_id, subtask: true, state: desired
+          subtask: true, state: desired
         }
         job_payload  = {
           title: titles[:jobsite], description: descriptions[:jobsite].to_s,
-          conversation: job_conv_id, subtask: true, state: desired
+          subtask: true, state: desired
         }
 
         results = { user: nil, job: nil }

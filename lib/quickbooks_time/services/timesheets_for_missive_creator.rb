@@ -43,13 +43,19 @@ class TimesheetsForMissiveCreator
 
     @task_sync.sync_pair!(
       ts: ts,
-      user_conv_id: ts['user_conversation_id'],
-      job_conv_id:  ts['jobsite_conversation_id'],
       titles:       { user: title, jobsite: title },
       descriptions: { user: desc, jobsite: desc }
     ) do |tasks|
-      @repos.timesheets.set_user_task!(ts['id'], tasks[:user]['id'], tasks[:user]['state']) if tasks[:user]
-      @repos.timesheets.set_job_task!(ts['id'], tasks[:job]['id'], tasks[:job]['state']) if tasks[:job]
+      if tasks[:user]
+        @repos.timesheets.set_user_task!(
+          ts['id'], tasks[:user]['id'], tasks[:user]['state'], tasks[:user]['conversation']
+        )
+      end
+      if tasks[:job]
+        @repos.timesheets.set_job_task!(
+          ts['id'], tasks[:job]['id'], tasks[:job]['state'], tasks[:job]['conversation']
+        )
+      end
       callback.call
     end
   end
