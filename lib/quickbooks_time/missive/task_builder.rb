@@ -143,7 +143,7 @@ class QuickbooksTime
         (has_end_time || has_duration) ? 'closed' : 'in_progress'
       end
 
-      def self.build_task_creation_payload(ts, references:, subject:, conversation_id: nil)
+      def self.build_task_creation_payload(ts, references:, conversation_subject:, conversation_id: nil)
         start_t, end_t = compute_times(ts)
         state = determine_task_state(ts)
         due_date = end_t || (start_t ? start_t + 28_800 : Time.now + 28_800) # +8h
@@ -153,7 +153,7 @@ class QuickbooksTime
         {
           tasks: {
             references: references,
-            subject: subject,
+            conversation_subject: conversation_subject,
             title: build_task_title(ts),
             description: build_task_description(ts, start_t, end_t),
             due_at: due_date.to_i,
@@ -169,7 +169,7 @@ class QuickbooksTime
         job_name = ts['jobsite_name']
         build_task_creation_payload(ts,
           references: ["qbt:job:#{job_id}"],
-          subject: "QuickBooks Time: #{job_name}")
+          conversation_subject: "QuickBooks Time: #{job_name}")
       end
 
       def self.build_user_task_creation_payload(ts)
@@ -177,7 +177,7 @@ class QuickbooksTime
         user_name = ts['user_name']
         build_task_creation_payload(ts,
           references: ["qbt:user:#{user_id}"],
-          subject: "QuickBooks Time: #{user_name}")
+          conversation_subject: "QuickBooks Time: #{user_name}")
       end
 
       def self.build_task_update_payload(ts)
