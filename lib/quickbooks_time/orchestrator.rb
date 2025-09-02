@@ -3,7 +3,10 @@
 require_relative 'services/users_syncer'
 require_relative 'services/jobs_syncer'
 require_relative 'services/timesheets_syncer'
+require_relative 'services/timesheets_today_scanner'
 require_relative 'services/timesheets_for_missive_creator'
+require_relative 'services/missive_task_verifier'
+require_relative 'missive/client'
 require_relative 'util/constants'
 require_relative '../../nonblock_socket/select_controller'
 
@@ -16,7 +19,11 @@ class QuickbooksTime
     :poll_users,
     :poll_jobs,
     :poll_timesheets,
-    :process_timesheets_for_missive_tasks
+    :poll_timesheets_today,
+    :process_timesheets_for_missive_tasks,
+    :reconcile_missive_task_states,
+    :verify_missive_tasks,
+    :drain_missive_queue
   ]
 
   POLL_INTERVAL = Constants::QBT_POLL_INTERVAL
@@ -30,16 +37,29 @@ class QuickbooksTime
     @queue = queue
     @limiter = limiter
     @auth = auth
+    @polling_started = false
+    @auth_ready = !!auth&.status
+    @html_ready = false
   end
 
   def auth=(auth)
     @auth = auth
-    authorized if auth&.status
+    @auth_ready = !!auth&.status
+    LOG.debug [:qbt_auth_ready, @auth_ready]
+    try_start_polling
   end
 
+  # Backward-compatibility: some callers may still invoke `authorized`.
+  # We interpret that as the HTML/UI layer being ready to start polling.
   def authorized
-    LOG.info [:quickbooks_time_authorized_starting_poll_cycle]
-    schedule_polls
+    html_authorized!
+  end
+
+  # Explicitly signal that the HTML/session layer has been authorized and is ready.
+  def html_authorized!
+    @html_ready = true
+    LOG.debug [:qbt_html_ready, @html_ready]
+    try_start_polling
   end
 
   def auth_url
@@ -54,6 +74,25 @@ class QuickbooksTime
 
   def on_fail(stage)
     LOG.error [:quickbooks_time_poll_failed, stage]
+  end
+
+  def try_start_polling
+    return if @polling_started
+    unless @auth_ready && @html_ready
+      unless @auth_ready
+        LOG.info [:qbt_polling_waiting, :reason, :auth_token_missing]
+      end
+      unless @html_ready
+        LOG.info [:qbt_polling_waiting, :reason, :html_not_authorized]
+      end
+      return
+    end
+
+    @polling_started = true
+    LOG.info [:quickbooks_time_authorized_starting_poll_cycle]
+    schedule_polls
+  rescue => e
+    LOG.error [:qbt_polling_start_error, e.class, e.message]
   end
 
   def schedule_polls
@@ -84,9 +123,35 @@ class QuickbooksTime
     end
   end
 
+  # Faster cycle specifically for detecting in-progress timesheets today.
+  def poll_timesheets_today
+    TimesheetsTodayScanner.new(qbt, repos).run do |ok|
+      on_fail(:timesheets_today) unless ok
+      add_timeout(method(:poll_timesheets_today), Constants::QBT_TODAY_SCAN_INTERVAL)
+    end
+  end
+
   def process_timesheets_for_missive_tasks
     TimesheetsForMissiveCreator.new(repos).run do
       add_timeout(method(:process_timesheets_for_missive_tasks), POLL_INTERVAL)
     end
+  end
+
+  def reconcile_missive_task_states
+    QuickbooksTime::TaskStateReconciler.new(repos).run do
+      add_timeout(method(:reconcile_missive_task_states), POLL_INTERVAL)
+    end
+  end
+
+  def verify_missive_tasks
+    QuickbooksTime::MissiveTaskVerifier.new(repos).run do
+      add_timeout(method(:verify_missive_tasks), Constants::MISSIVE_VERIFY_INTERVAL)
+    end
+  end
+
+  def drain_missive_queue
+    # Kick the Missive queue; it no-ops if already draining
+    QuickbooksTime::Missive::Queue.drain(limiter: limiter, client: QuickbooksTime::Missive::Client.new, repo: repos.timesheets)
+    add_timeout(method(:drain_missive_queue), POLL_INTERVAL)
   end
 end

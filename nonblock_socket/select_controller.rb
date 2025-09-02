@@ -162,6 +162,7 @@ class SelectController
   end
 
   def run
+    LOG.info [:select_controller, :loop_start, :pid, Process.pid]
     loop { select_socks }
     # $stdout.puts([Time.now, 'ok', Process.pid])
   rescue StandardError => e

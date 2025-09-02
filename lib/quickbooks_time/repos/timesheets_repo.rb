@@ -7,6 +7,24 @@ class TimesheetsRepo
     @db = db
   end
 
+  # Select timesheets with Missive task IDs present in a recent window.
+  # Returns enriched rows with names and timezone for TaskBuilder.
+  def tasks_with_task_ids_recent(lookback_minutes: 180)
+    sql = <<~SQL
+      SELECT t.*, j.name AS jobsite_name,
+             (u.first_name || ' ' || u.last_name) AS user_name,
+             u.timezone_offset AS user_tz_offset
+      FROM quickbooks_time_timesheets t
+      LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
+      LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
+      WHERE (t.missive_user_task_id IS NOT NULL OR t.missive_jobsite_task_id IS NOT NULL)
+        AND t.updated_at >= (now() - ($1 || ' minutes')::interval)
+      ORDER BY t.updated_at DESC
+    SQL
+    res = @db.exec_params(sql, [lookback_minutes])
+    res.map { |r| r }
+  end
+
   # Inserts or updates a timesheet. Returns [changed, previous_task_ids].
   def upsert(ts)
     id        = ts['id'] || ts[:id]
@@ -21,21 +39,42 @@ class TimesheetsRepo
     created   = ts['created'] || ts[:created]
     modified  = ts['last_modified'] || ts[:last_modified]
     state     = QuickbooksTime::Missive::TaskBuilder.determine_task_state(ts)
+    # Prefer explicit flag if provided; otherwise infer from missing end time
+    # (treat manual entries as not on the clock).
+    explicit_on_clock = ts.key?('on_the_clock') || ts.key?(:on_the_clock)
+    on_clock  = if explicit_on_clock
+                  !!(ts['on_the_clock'] || ts[:on_the_clock])
+                else
+                  end_t.nil? && entry.to_s.downcase != 'manual'
+                end
+    # If an end time is present, force off-the-clock to prevent loops.
+    on_clock = false unless end_t.nil? || end_t == ''
 
     start_t   = nil if start_t.nil? || start_t == ''
     end_t     = nil if end_t.nil? || end_t == ''
     created   = nil if created.nil? || created == ''
     modified  = nil if modified.nil? || modified == ''
 
-    hash = Digest::SHA1.hexdigest([user_id, date, secs, notes, entry, start_t, end_t].join('|'))
+    # Include on_the_clock in the change fingerprint so that clock-in/out
+    # transitions trigger an update and downstream state reconciliation.
+    hash = Digest::SHA1.hexdigest([
+      user_id,
+      date,
+      secs,
+      notes,
+      entry,
+      start_t,
+      end_t,
+      (on_clock ? '1' : '0')
+    ].join('|'))
     res = @db.exec_params('SELECT last_hash, missive_user_task_id, missive_jobsite_task_id FROM quickbooks_time_timesheets WHERE id=$1', [id])
     if res.ntuples.zero?
       @db.exec_params(
         'INSERT INTO quickbooks_time_timesheets (
            id, quickbooks_time_jobsite_id, user_id, date, duration_seconds,
-           notes, last_hash, entry_type, start_time, end_time, created_qbt, modified_qbt, missive_task_state)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
-        [id, job_id, user_id, date, secs, notes, hash, entry, start_t, end_t, created, modified, state]
+           notes, last_hash, entry_type, start_time, end_time, created_qbt, modified_qbt, on_the_clock)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
+        [id, job_id, user_id, date, secs, notes, hash, entry, start_t, end_t, created, modified, on_clock]
       )
       [true, {}]
     elsif res[0]['last_hash'] != hash
@@ -48,9 +87,9 @@ class TimesheetsRepo
            SET quickbooks_time_jobsite_id=$1, user_id=$2, date=$3,
                duration_seconds=$4, notes=$5, last_hash=$6,
                entry_type=$7, start_time=$8, end_time=$9,
-               created_qbt=$10, modified_qbt=$11, missive_task_state=$13, updated_at=now()
-         WHERE id=$12',
-        [job_id, user_id, date, secs, notes, hash, entry, start_t, end_t, created, modified, id, state]
+               created_qbt=$10, modified_qbt=$11, on_the_clock=$13, updated_at=now()
+        WHERE id=$12',
+        [job_id, user_id, date, secs, notes, hash, entry, start_t, end_t, created, modified, id, on_clock]
       )
       [true, old_task_ids]
     else
@@ -74,16 +113,28 @@ class TimesheetsRepo
     end
   end
   
-  def update_task_state(id, state)
-    @db.exec_params("UPDATE quickbooks_time_timesheets SET missive_task_state=$1, updated_at=now() WHERE id=$2", [state, id])
+  def update_user_task_state(id, state)
+    @db.exec_params("UPDATE quickbooks_time_timesheets SET missive_user_task_state=$1, updated_at=now() WHERE id=$2", [state, id])
+  end
+
+  def update_job_task_state(id, state)
+    @db.exec_params("UPDATE quickbooks_time_timesheets SET missive_jobsite_task_state=$1, updated_at=now() WHERE id=$2", [state, id])
+  end
+
+  def set_user_task!(id, task_id, state, conversation_id = nil)
+    save_task_id(id, task_id, :user, conversation_id: conversation_id)
+    update_user_task_state(id, state)
+  end
+
+  def set_job_task!(id, task_id, state, conversation_id = nil)
+    save_task_id(id, task_id, :jobsite, conversation_id: conversation_id)
+    update_job_task_state(id, state)
   end
 
   def tasks_to_create_or_update(start_date = nil)
     sql = <<~SQL
       SELECT t.*, j.name AS jobsite_name,
              (u.first_name || ' ' || u.last_name) AS user_name,
-             u.missive_conversation_id AS user_conversation_id,
-             j.missive_conversation_id AS jobsite_conversation_id,
              u.timezone_offset AS user_tz_offset
       FROM quickbooks_time_timesheets t
       LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
@@ -100,14 +151,8 @@ class TimesheetsRepo
 
     where_clauses << <<~SQL.strip
       (
-        t.missive_user_task_id IS NULL OR
-        t.missive_jobsite_task_id IS NULL OR
-        t.missive_task_state IS DISTINCT FROM
-           (CASE
-             WHEN (t.end_time IS NOT NULL OR t.duration_seconds > 0)
-               THEN 'closed'
-             ELSE 'in_progress'
-           END)
+        t.missive_user_task_id IS NULL
+        OR t.missive_jobsite_task_id IS NULL
       )
     SQL
 
@@ -116,6 +161,72 @@ class TimesheetsRepo
 
     res = params.empty? ? @db.exec(sql) : @db.exec_params(sql, params)
     res.map { |r| r }
+  end
+
+  # Returns timesheets where both task IDs exist but either recorded Missive
+  # state is out of sync with the desired state computed from local data.
+  def tasks_to_reconcile_state(start_date = nil)
+    sql = <<~SQL
+      SELECT t.*, j.name AS jobsite_name,
+             (u.first_name || ' ' || u.last_name) AS user_name,
+             u.timezone_offset AS user_tz_offset
+      FROM quickbooks_time_timesheets t
+      LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
+      LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
+    SQL
+
+    where_clauses = []
+    params = []
+
+    if start_date
+      where_clauses << "t.date >= $#{params.length + 1}"
+      params << start_date
+    end
+
+    desired_expr = <<~SQL.strip
+      (
+        CASE
+          WHEN t.end_time IS NULL AND (
+            COALESCE(t.start_time, t.created_qbt) IS NULL
+            OR (now() - COALESCE(t.start_time, t.created_qbt)) <= interval '12 hours'
+          ) THEN 'in_progress'
+          ELSE 'closed'
+        END
+      )
+    SQL
+
+    where_clauses << <<~SQL.strip
+      (
+        t.missive_user_task_id IS NOT NULL AND t.missive_jobsite_task_id IS NOT NULL
+        AND (
+          COALESCE(t.missive_user_task_state, t.missive_task_state) IS DISTINCT FROM #{desired_expr}
+          OR COALESCE(t.missive_jobsite_task_state, t.missive_task_state) IS DISTINCT FROM #{desired_expr}
+        )
+      )
+    SQL
+
+    sql << " WHERE #{where_clauses.join(' AND ')}" unless where_clauses.empty?
+    sql << " ORDER BY t.updated_at ASC"
+
+    res = params.empty? ? @db.exec(sql) : @db.exec_params(sql, params)
+    res.map { |r| r }
+  end
+
+  # Apply a webhook-reported task state to the timesheet row identified by task_id.
+  # Determines if the task belongs to user or jobsite and updates the corresponding state column.
+  def apply_webhook_task_state(task_id, state)
+    res = @db.exec_params(
+      'SELECT id, missive_user_task_id, missive_jobsite_task_id FROM quickbooks_time_timesheets WHERE missive_user_task_id=$1 OR missive_jobsite_task_id=$1 LIMIT 1',
+      [task_id]
+    )
+    return false if res.ntuples.zero?
+    row = res[0]
+    if row['missive_user_task_id'] == task_id
+      update_user_task_state(row['id'], state)
+    elsif row['missive_jobsite_task_id'] == task_id
+      update_job_task_state(row['id'], state)
+    end
+    true
   end
 
   # Returns the paired conversation ID for a given task or conversation.

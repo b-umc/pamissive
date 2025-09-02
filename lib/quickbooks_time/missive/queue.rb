@@ -27,16 +27,16 @@ class QuickbooksTime
           @q << Task.new(:delete_task, task_id) if task_id
         end
 
-        def drain(limiter:, client:)
+        def drain(limiter:, client:, repo: nil)
           return if @draining
 
           @draining = true
-          process_next(limiter, client)
+          process_next(limiter, client, repo)
         end
 
         private
 
-        def process_next(limiter, client)
+        def process_next(limiter, client, repo)
           task = @q.shift
           unless task
             @draining = false
@@ -46,16 +46,24 @@ class QuickbooksTime
           limiter.wait_until_allowed do
             case task.action
             when :create_task
-              client.create_task(task.payload) do |_res|
-                add_timeout(proc { process_next(limiter, client) }, 0)
+              client.create_task(task.payload) do |_status, _hdrs, _body|
+                add_timeout(proc { process_next(limiter, client, repo) }, 0)
               end
             when :update_task
-              client.update_task(task.payload[:task_id], task.payload[:payload]) do |_res|
-                add_timeout(proc { process_next(limiter, client) }, 0)
+              client.update_task(task.payload[:task_id], task.payload[:payload]) do |status, _hdrs, body|
+                if (200..299).include?(status) && repo
+                  begin
+                    new_state = body&.dig('tasks', 'state') || task.payload[:payload].dig(:tasks, :state)
+                    repo.apply_webhook_task_state(task.payload[:task_id], new_state) if new_state
+                  rescue StandardError => e
+                    # swallow and continue draining
+                  end
+                end
+                add_timeout(proc { process_next(limiter, client, repo) }, 0)
               end
             when :delete_task
-              client.delete_task(task.payload) do |_res|
-                add_timeout(proc { process_next(limiter, client) }, 0)
+              client.delete_task(task.payload) do |_status, _hdrs, _body|
+                add_timeout(proc { process_next(limiter, client, repo) }, 0)
               end
             end
           end

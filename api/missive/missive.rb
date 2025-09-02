@@ -67,8 +67,8 @@ class Missive
 
     # LOG.debug([:sending_post_to_missive_channel, endpoint, :with, body_hash])
     NonBlockHTTP::Client::ClientSession.new.get(endpoint, { headers: HEADERS }) do |response|
-      # Handle any none 2xx status code as a error.
-      LOG.error([:missive_post_error, response]) unless (200..299).include?(response.code)
+      # Handle any non-2xx status code as an error.
+      LOG.error([:missive_get_error, response]) unless (200..299).include?(response.code)
 
       block.call(response) if block_given?
     end

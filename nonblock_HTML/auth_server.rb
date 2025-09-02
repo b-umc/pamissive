@@ -6,6 +6,8 @@ require 'securerandom'
 require_relative '../api/google/google_auth'
 require_relative 'auth_session'
 require_relative '../nonblock_socket/select_controller'
+require_relative '../nonblock_socket/event_bus'
+require_relative '../api/missive/missive'
 require_relative '../env/token_manager' # Ensure DB is loaded
 
 class NonBlockHTML::Server; end
@@ -45,8 +47,8 @@ class NonBlockHTML::Server::AuthServer
     LOG.debug(@sockets.map { |e| [e.object_id, e.closed?] })
     JSON.parse(data).each do |k, v|
       next session_data(v, wsock) if k == 'session_data'
-
-      LOG.error([:invalid_method_at_auth_server, k])
+      # Ignore non-auth messages that may be sent by the Missive UI client
+      LOG.debug([:auth_ws_ignoring_message_key, k])
     end
   end
 
@@ -108,4 +110,6 @@ class NonBlockHTML::Server::AuthServer
     res.close
     false
   end
+
+  # Missive webhook handler removed. Verification is handled via polling.
 end

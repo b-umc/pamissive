@@ -17,6 +17,7 @@ require_relative '../../lib/quickbooks_time/util/constants'
 require_relative '../../lib/quickbooks_time/db/schema'
 require_relative '../../nonblock_HTTP/manager'
 require_relative 'auth_server'
+require_relative '../../lib/quickbooks_time/services/task_state_reconciler'
 
 server = NonBlockHTTP::Manager.server(port: 8080)
 
@@ -57,6 +58,8 @@ QBT = QuickbooksTime.new(
 ) unless defined?(QBT)
 auth = QuickbooksTime::AuthServer.new(server, proc { |srv| QBT.auth = srv })
 QBT.auth ||= auth
+
+# Missive webhooks are disabled; rely on verification + reconciliation.
 
 at_exit { db_conn.close }
 
