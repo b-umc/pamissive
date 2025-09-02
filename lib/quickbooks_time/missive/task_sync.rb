@@ -1,18 +1,36 @@
 # frozen_string_literal: true
 
 require_relative '../../../logging/app_logger'
+require_relative '../../../nonblock_socket/event_bus'
+require_relative '../util/constants'
+require_relative '../../../nonblock_socket/select_controller'
 LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 
 class QuickbooksTime
   module Missive
     class TaskSync
+      include TimeoutInterface
       def initialize(client:)
         @client = client
       end
 
-      def desired_state(on_the_clock)
-        return 'in_progress' if on_the_clock
-        'closed'
+      def desired_state(ts)
+        on_the_clock = ts[:on_the_clock] || ts['on_the_clock']
+        # Default closed unless explicitly on the clock
+        return 'closed' unless on_the_clock
+
+        # If it's marked on_the_clock but appears stale (>12h), treat as closed
+        begin
+          start_t, end_t = QuickbooksTime::Missive::TaskBuilder.compute_times(ts)
+          reference_time = end_t || start_t
+          if reference_time && (Time.now - reference_time) > (12 * 60 * 60)
+            return 'closed'
+          end
+        rescue StandardError
+          # If compute fails, fall through and consider on_the_clock
+        end
+
+        'in_progress'
       end
 
       def create_and_ensure!(payload, desired, ts_id, &done)
@@ -21,17 +39,36 @@ class QuickbooksTime
           LOG.debug([:missive_create_response, ts_id, :status, status, :headers, hdrs, :body, json])
           task = (200..299).include?(status) ? json&.dig('tasks') : nil
           return done.call(nil) unless task
+
+          # If already matches, finish.
           return done.call(task) if task['state'] == desired
+
+          # Wait briefly for webhook to confirm state change from Missive rules.
+          task_id = task['id']
           LOG.debug([:task_state, ts_id, :from, task['state'], :to, desired])
-          @client.update_task(task['id'], { tasks: { state: desired } }) do |s2, h2, j2|
-            LOG.debug([:missive_update_response, ts_id, :status, s2, :headers, h2, :body, j2])
-            done.call(j2&.dig('tasks'))
+
+          received = false
+          handler = proc do |args|
+            data = args&.first || {}
+            next unless data[:id] == task_id
+            received = true
+            EventBus.unsubscribe('missive_webhook', 'task_updated', handler)
+            # Do not correct immediately; record and allow poll loop to reconcile
+            done.call({ 'id' => task_id, 'state' => data[:state], 'conversation' => data[:conversation] })
           end
+
+          EventBus.subscribe('missive_webhook', 'task_updated', handler)
+
+          # Do not correct immediately; rely on webhook + poll reconciliation
+          add_timeout(proc do
+            EventBus.unsubscribe('missive_webhook', 'task_updated', handler) unless received
+            done.call(task)
+          end, Constants::MISSIVE_WEBHOOK_WAIT_SEC)
         end
       end
 
       def sync_pair!(ts:, user_payload:, job_payload:, &done)
-        desired = desired_state(ts[:on_the_clock] || ts['on_the_clock'])
+        desired = desired_state(ts)
 
         user_payload = user_payload.merge(state: desired)
         job_payload  = job_payload.merge(state: desired)

@@ -125,10 +125,16 @@ class QuickbooksTime::AuthServer
   end
 
   def retrieve_token
-    return unless (@token = TOK['quickbooks_time'])
+    @token = TOK['quickbooks_time']
+    unless @token
+      LOG.info [:quickbooks_time_no_persisted_token]
+      return
+    end
 
-    LOG.debug([:quickbooks_time_token_expires_in, @token.expires_in])
-    add_timeout(method(:refresh_access_token), [@token.expires_in - 1000, 1].max)
+    LOG.debug([:quickbooks_time_token_expires_in, @token.expires_in, :expires_at, @token.expires_at])
+    delay = [@token.expires_in - 1000, 1].max
+    LOG.debug([:quickbooks_time_schedule_refresh_in, delay])
+    add_timeout(method(:refresh_access_token), delay)
   end
 
   def refresh_token_body
@@ -143,6 +149,7 @@ class QuickbooksTime::AuthServer
   def refresh_access_token
     return unless @token.refresh_token
 
+    LOG.info [:quickbooks_time_refreshing_with_refresh_token]
     NonBlockHTTP::Client::ClientSession.new.post(
       TOKEN_URL, { body: refresh_token_body, headers: HEADERS }, log_debug: true
     ) do |response|

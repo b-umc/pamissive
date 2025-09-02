@@ -211,10 +211,20 @@ class TokenManager
   end
 
   def load_tokens_result(result)
-    LOG.debug([:load_tokens_result, result.result_status == 1])
+    LOG.debug([:load_tokens_result, result.result_status == 1, :rows, result.ntuples])
+    if result.ntuples.zero?
+      LOG.info [:oauth_tokens_empty]
+      return
+    end
+
     result.each do |row|
-      tok = token_decrypt(row)
-      @tokens[tok.service] = tok
+      begin
+        tok = token_decrypt(row)
+        @tokens[tok.service] = tok
+        LOG.debug [:token_loaded, tok.service, :expires_at, tok.expires_at]
+      rescue StandardError => e
+        LOG.error [:token_decrypt_failed, row['service_name'], e.class, e.message]
+      end
     end
   end
 

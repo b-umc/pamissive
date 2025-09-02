@@ -40,18 +40,18 @@ class QuickbooksTime
         items = raw.is_a?(Array) ? raw : raw.to_s.split(/\r?\n+/)
         items.map { |n| n.to_s.strip }.reject(&:empty?)
       end
-      
+
       def self.entry_type(ts)
         (ts['type'] || ts[:type] || ts['entry_type']).to_s.downcase
       end
-      
+
       def self.icon_for(ts)
         case entry_type(ts)
         when 'manual', 'edited', 'edit' then '✏️'
         else '⏱'
         end
       end
-      
+
       # --- time parsing / conversion ----------------------------------------
 
       def self.parse_utc(s)
@@ -76,32 +76,38 @@ class QuickbooksTime
         tzid = ts['user_tz'] || ts[:user_tz] || 'America/Vancouver'
         tz   = TZInfo::Timezone.get(tzid) rescue TZInfo::Timezone.get('UTC')
 
-        LOG.debug([:compute_times_in, start_s: start_s, end_s: end_s, secs: secs, entry: entry, date: date_s, tzid: tzid])
+        #LOG.debug([:compute_times_in, start_s: start_s, end_s: end_s, secs: secs, entry: entry, date: date_s, tzid: tzid])
 
         start_utc = parse_utc(start_s)
         end_utc   = parse_utc(end_s)
 
-        LOG.debug([:parsed_utc, start_utc: start_utc, end_utc: end_utc])
+        # Normalize to UTC before converting to the user's timezone.
+        # QBT often returns ISO8601 with offsets (e.g., -07:00). Passing a
+        # zoned time directly to utc_to_local would double-apply the offset.
+        start_utc = start_utc&.getutc
+        end_utc   = end_utc&.getutc
+
+        #LOG.debug([:parsed_utc, start_utc: start_utc, end_utc: end_utc])
 
         if start_utc.nil? && entry == 'manual' && date_s
           d = Date.parse(date_s) rescue nil
-          LOG.debug([:fallback_date, date: d])
+          #LOG.debug([:fallback_date, date: d])
           if d
             start_local = tz.local_time(d.year, d.month, d.day, 9, 30, 0)
             start_utc = tz.local_to_utc(start_local)
-            LOG.debug([:fallback_start_set, start_local: start_local, start_utc: start_utc])
+            #LOG.debug([:fallback_start_set, start_local: start_local, start_utc: start_utc])
           end
         end
 
         if end_utc.nil? && start_utc && secs.positive?
           end_utc = start_utc + secs
-          LOG.debug([:derived_end_utc, end_utc: end_utc])
+          #LOG.debug([:derived_end_utc, end_utc: end_utc])
         end
 
         start_local = start_utc ? tz.utc_to_local(start_utc) : nil
         end_local   = end_utc   ? tz.utc_to_local(end_utc)   : nil
 
-        LOG.debug([:compute_times_out, start_local: start_local, end_local: end_local])
+        #LOG.debug([:compute_times_out, start_local: start_local, end_local: end_local])
 
         [start_local, end_local]
       end
@@ -138,9 +144,26 @@ class QuickbooksTime
       # --- state + payloads --------------------------------------------------
 
       def self.determine_task_state(ts)
-        has_end_time = !(ts['end_time'].nil? || ts['end_time'].empty?) || !(ts['end'].nil? || ts['end'].empty?)
-        has_duration = (ts['duration_seconds'] || ts['duration'] || 0).to_i.positive?
-        (has_end_time || has_duration) ? 'closed' : 'in_progress'
+        on_the_clock = ts['on_the_clock'] || ts[:on_the_clock]
+        begin
+          start_t, end_t = compute_times(ts)
+        rescue StandardError
+          start_t = end_t = nil
+        end
+
+        # Consider a timesheet "running" only if there is no end time yet.
+        # Avoid trusting on_the_clock if an end time exists (it can lag).
+        running = end_t.nil?
+        desired = running ? 'in_progress' : 'closed'
+
+        if desired == 'in_progress'
+          reference_time = end_t || start_t
+          if reference_time && (Time.now - reference_time) > (12 * 60 * 60)
+            desired = 'closed'
+          end
+        end
+
+        desired
       end
 
       def self.build_task_creation_payload(ts, references:, conversation_subject:, conversation_id: nil)

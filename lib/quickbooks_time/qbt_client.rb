@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'date'
 require 'uri'
 require_relative '../../nonblock_HTTP/client/session'
 require_relative 'rate_limiter'
@@ -17,9 +18,29 @@ class QbtClient
   end
 
   def timesheets_modified_since(timestamp_iso, page: 1, limit: 50, supplemental: true, &blk)
+    # Apply a small lookback on start_date to avoid timezone edge cases
+    # where the modified_since date falls on a different day in UTC vs local.
+    begin
+      start_d = Date.parse(timestamp_iso) - Constants::QBT_SINCE_LOOKBACK_DAYS
+    rescue
+      start_d = Date.today - Constants::QBT_SINCE_LOOKBACK_DAYS
+    end
     params = {
-      start_date: timestamp_iso.to_s[0, 10],
+      start_date: start_d.to_s,
       modified_since: timestamp_iso,
+      limit: limit,
+      page: page
+    }
+    params[:supplemental_data] = supplemental ? 'yes' : 'no'
+    api_request("timesheets?#{URI.encode_www_form(params)}", &blk)
+  end
+
+  # Fetch timesheets within a date range (inclusive). Useful to detect
+  # in-progress timesheets that may not surface via modified_since yet.
+  def timesheets_by_date(start_date:, end_date:, page: 1, limit: 50, supplemental: true, &blk)
+    params = {
+      start_date: start_date,
+      end_date: end_date,
       limit: limit,
       page: page
     }

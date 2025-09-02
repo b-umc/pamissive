@@ -45,10 +45,17 @@ LibLoader.new(
     session/session
   ]
 ) { JOBSITES = NonBlockHTML::Server::AuthServer.new(callback: method(:authorized)) unless defined?(JOBSITES) }
+LOG.info 'HTML auth server initialized; open http://localhost:8080/ in a browser to connect.'
 
 def authorized(session)
   @sessions ||= []
   @sessions << NonBlockHTML::Server::Session.new(session)
+  # Start QBT polling only after HTML/session authorization is established.
+  begin
+    QBT.html_authorized! if defined?(QBT)
+  rescue NameError
+    # QBT may not be loaded yet; ignore and allow later startup.
+  end
 end
 
 SelectController.run

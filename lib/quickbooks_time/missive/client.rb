@@ -34,6 +34,17 @@ class QuickbooksTime
         update_task(task_id, { tasks: { status: 'deleted' } }, &blk)
       end
 
+      def get_task(task_id, &blk)
+        # Missive Public API does not expose GET /tasks/:id; use filter by ids
+        enqueue(:get, "tasks?ids=#{task_id}", nil, &blk)
+      end
+
+      def get_conversation_comments(conversation_id, limit: 10, until_ts: nil, &blk)
+        qs = ["limit=#{limit}"]
+        qs << "until=#{until_ts}" if until_ts
+        enqueue(:get, "conversations/#{conversation_id}/comments?#{qs.join('&')}", nil, &blk)
+      end
+
       private
 
       def enqueue(verb, path, payload, &blk)
@@ -69,6 +80,10 @@ class QuickbooksTime
           @channel.channel_patch(path, payload) do |res|
             blk.call(res.code, res.headers.to_h, parse_body(res.body))
           end
+        when :get
+          @channel.channel_get(path) do |res|
+            blk.call(res.code, res.headers.to_h, parse_body(res.body))
+          end
         end
       end
 
@@ -78,4 +93,3 @@ class QuickbooksTime
     end
   end
 end
-
