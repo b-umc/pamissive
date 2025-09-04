@@ -4,7 +4,7 @@ require 'timeout'
 require_relative '../logging/app_logger'
 require_relative 'event_bus'
 
-LOG = AppLogger.setup(__FILE__) unless defined?(LOG)
+LOG = AppLogger.setup(STDOUT) unless defined?(LOG)
 
 module TimeoutInterface
   def add_timeout(callback_proc, duration)

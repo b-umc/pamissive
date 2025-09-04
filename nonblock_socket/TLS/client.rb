@@ -21,7 +21,7 @@ class NonBlockSocket::TLS::Client < NonBlockSocket::TCP::Client
     ssl_context.verify_mode = OpenSSL::SSL::VERIFY_PEER
     ssl_context.cert_store = OpenSSL::X509::Store.new
     ssl_context.cert_store.set_default_paths
-    LOG.debug("SSL Certificate paths loaded: #{ssl_context.cert_store}")
+    # LOG.debug("SSL Certificate paths loaded: #{ssl_context.cert_store}")
     ssl_context
   end
 
@@ -59,7 +59,7 @@ class NonBlockSocket::TLS::Client < NonBlockSocket::TCP::Client
   private
 
   def setup_io
-    LOG.debug([:ssl_setup_io, @error_status&.first])
+    #LOG.debug([:ssl_setup_io, @error_status&.first])
     return schedule_reconnect if @error_status
 
     super
@@ -77,7 +77,7 @@ class NonBlockSocket::TLS::Client < NonBlockSocket::TCP::Client
   def write_chunk
     super
   rescue OpenSSL::SSL::SSLErrorWaitReadable, OpenSSL::SSL::SSLErrorWaitWritable
-    LOG.debug(:ssl_write_delay)
+    #LOG.debug(:ssl_write_delay)
     ssl_delay { write_chunk }
   end
 

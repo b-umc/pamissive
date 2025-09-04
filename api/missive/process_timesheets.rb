@@ -44,7 +44,7 @@ module QuickbooksTime
         limiter = RateLimiter.new(interval: Constants::MISSIVE_POST_MIN_INTERVAL)
         client  = QuickbooksTime::Missive::Client.new
 
-        rows = ts_repo.unposted_since(Date.new(1970, 1, 1))
+        rows = ts_repo.unposted_since(Constants::BACKFILL_EPOCH_DATE)
         idx = 0
 
         process_next = proc do

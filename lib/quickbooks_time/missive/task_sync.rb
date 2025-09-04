@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require_relative '../../../logging/app_logger'
-require_relative '../../../nonblock_socket/event_bus'
 require_relative '../util/constants'
 require_relative '../../../nonblock_socket/select_controller'
 LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
@@ -15,22 +14,9 @@ class QuickbooksTime
       end
 
       def desired_state(ts)
-        on_the_clock = ts[:on_the_clock] || ts['on_the_clock']
-        # Default closed unless explicitly on the clock
-        return 'closed' unless on_the_clock
-
-        # If it's marked on_the_clock but appears stale (>12h), treat as closed
-        begin
-          start_t, end_t = QuickbooksTime::Missive::TaskBuilder.compute_times(ts)
-          reference_time = end_t || start_t
-          if reference_time && (Time.now - reference_time) > (12 * 60 * 60)
-            return 'closed'
-          end
-        rescue StandardError
-          # If compute fails, fall through and consider on_the_clock
-        end
-
-        'in_progress'
+        # Use the same logic as the rest of the system to avoid drift with
+        # reconciliation and verification.
+        QuickbooksTime::Missive::TaskBuilder.determine_task_state(ts)
       end
 
       def create_and_ensure!(payload, desired, ts_id, &done)
@@ -43,27 +29,26 @@ class QuickbooksTime
           # If already matches, finish.
           return done.call(task) if task['state'] == desired
 
-          # Wait briefly for webhook to confirm state change from Missive rules.
+          # Webhooks are unreliable; fetch recent conversation comments to see
+          # if Missive rules already adjusted the task state.
+          conv_id = task['conversation']
           task_id = task['id']
-          LOG.debug([:task_state, ts_id, :from, task['state'], :to, desired])
+          LOG.debug([:task_state_check, ts_id, :task_id, task_id, :conv, conv_id, :from, task['state'], :to, desired])
 
-          received = false
-          handler = proc do |args|
-            data = args&.first || {}
-            next unless data[:id] == task_id
-            received = true
-            EventBus.unsubscribe('missive_webhook', 'task_updated', handler)
-            # Do not correct immediately; record and allow poll loop to reconcile
-            done.call({ 'id' => task_id, 'state' => data[:state], 'conversation' => data[:conversation] })
-          end
-
-          EventBus.subscribe('missive_webhook', 'task_updated', handler)
-
-          # Do not correct immediately; rely on webhook + poll reconciliation
-          add_timeout(proc do
-            EventBus.unsubscribe('missive_webhook', 'task_updated', handler) unless received
+          if conv_id && task_id
+            @client.get_conversation_comments(conv_id, limit: 10) do |st2, _hdr2, body2|
+              if (200..299).include?(st2) && body2.is_a?(Hash)
+                comments = body2['comments'] || []
+                found = comments.find { |c| c['task'] && (c['task']['id'] == task_id) && c['task']['state'] }
+                if found
+                  task['state'] = found['task']['state']
+                end
+              end
+              done.call(task)
+            end
+          else
             done.call(task)
-          end, Constants::MISSIVE_WEBHOOK_WAIT_SEC)
+          end
         end
       end
 

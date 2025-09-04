@@ -46,6 +46,7 @@ user_cursor = CursorStore.new(db: db_conn, api_name: 'quickbooks_time_users', fu
 job_cursor  = CursorStore.new(db: db_conn, api_name: 'quickbooks_time_jobs', full_resync: full_resync)
 queue           = QuickbooksTime::Missive::Queue
 missive_limiter = RateLimiter.new(interval: Constants::MISSIVE_POST_MIN_INTERVAL)
+QuickbooksTime::Missive::Client.global_limiter = missive_limiter
 
 QBT = QuickbooksTime.new(
   qbt: qbt,

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'time'
+require_relative '../util/constants'
 
 class CursorStore
   def initialize(db:, api_name:, full_resync: false)
@@ -8,7 +9,7 @@ class CursorStore
     @api_name = api_name
 
     if full_resync
-      @timestamp = Time.at(0).utc.iso8601
+      @timestamp = Constants::QBT_EPOCH_ISO
       @id = 0
       return
     end
@@ -22,7 +23,7 @@ class CursorStore
       if row && row['last_successful_sync']
         Time.parse(row['last_successful_sync']).utc.iso8601
       else
-        Time.at(0).utc.iso8601
+        Constants::QBT_EPOCH_ISO
       end
 
     @id = row && row['last_id'] ? row['last_id'].to_i : 0

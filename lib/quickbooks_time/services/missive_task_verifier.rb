@@ -63,20 +63,20 @@ class QuickbooksTime
           remote_state = nil
           if body.is_a?(Hash)
             comments = body['comments'] || []
-            comments.each do |c|
-              t = c['task']
-              if t && t['state']
-                remote_state = t['state']
-                break
-              end
-            end
+            found = comments.find { |c| c['task'] && c['task']['id'].to_s == task_id.to_s && c['task']['state'] }
+            remote_state = found && found['task']['state']
           end
           if remote_state
-            # Persist the observed remote state so our next selection is accurate
-            if type == :user
-              @repos.timesheets.update_user_task_state(ts['id'], remote_state)
-            else
-              @repos.timesheets.update_job_task_state(ts['id'], remote_state)
+            # Persist observed remote state only if it changed to avoid
+            # bumping updated_at unnecessarily (which would keep the row
+            # inside the recent lookback window forever).
+            current = (type == :user) ? ts['missive_user_task_state'] : ts['missive_jobsite_task_state']
+            if current != remote_state
+              if type == :user
+                @repos.timesheets.update_user_task_state(ts['id'], remote_state)
+              else
+                @repos.timesheets.update_job_task_state(ts['id'], remote_state)
+              end
             end
           end
 

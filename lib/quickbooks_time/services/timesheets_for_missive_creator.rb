@@ -18,6 +18,8 @@ class TimesheetsForMissiveCreator
   def run(&callback)
     start_date = if Constants::MISSIVE_BACKFILL_MONTHS.positive?
                    Date.today << Constants::MISSIVE_BACKFILL_MONTHS
+                 else
+                   Constants::BACKFILL_EPOCH_DATE
                  end
 
     timesheets_to_process = @repos.timesheets.tasks_to_create_or_update(start_date)

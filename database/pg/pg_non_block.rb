@@ -67,7 +67,7 @@ class PGNonBlock
 
   def pg_error(message)
     LOG.error(message)
-    @callbacks.each { |callback| callback.call(nil, message) }
+    @callbacks.each { |callback| callback.call(nil) }
     @callbacks.clear
     @requests.clear
   end
@@ -77,24 +77,19 @@ class PGNonBlock
     @callbacks.shift.call(result)
   end
 
-  def next_readable
-    @connection.consume_input
+def next_readable
+  @connection.consume_input
 
-    results = []
-    while (res = @connection.get_result)
-      results << res
-    end
-
-    if results.any?
-      cb = @callbacks.shift
-      cb&.call(results.last)
-    end
-  rescue PG::Error => e
-    pg_error("Database error: #{e.message}\n#{e.backtrace&.first(3)&.join("\n")}")
-  ensure
-    add_writable(method(:next_writable), sock) unless @requests.empty?
-    remove_readable(sock) && @wait_read = false unless @connection.is_busy
+  while (res = @connection.get_result)
+    cb = @callbacks.shift
+    cb&.call(res)
   end
+rescue PG::Error => e
+  pg_error("Database error: #{e.message}\n#{e.backtrace&.first(3)&.join("\n")}")
+ensure
+  add_writable(method(:next_writable), sock) unless @requests.empty?
+  remove_readable(sock) && @wait_read = false unless @connection.is_busy
+end
 
   def next_writable
     req = @requests.shift

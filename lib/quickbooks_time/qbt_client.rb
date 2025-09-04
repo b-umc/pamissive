@@ -2,6 +2,7 @@
 
 require 'json'
 require 'date'
+require 'time'
 require 'uri'
 require_relative '../../nonblock_HTTP/client/session'
 require_relative 'rate_limiter'
@@ -18,20 +19,27 @@ class QbtClient
   end
 
   def timesheets_modified_since(timestamp_iso, page: 1, limit: 50, supplemental: true, &blk)
-    # Apply a small lookback on start_date to avoid timezone edge cases
-    # where the modified_since date falls on a different day in UTC vs local.
-    begin
-      start_d = Date.parse(timestamp_iso) - Constants::QBT_SINCE_LOOKBACK_DAYS
+    # Compute a robust modified_since in UTC, subtracting a small skew to avoid
+    # missing rows that share the same second as the last sync.
+    ms = begin
+      (Time.parse(timestamp_iso).utc - Constants::QBT_SINCE_SKEW_SEC).iso8601
     rescue
-      start_d = Date.today - Constants::QBT_SINCE_LOOKBACK_DAYS
+      (Time.now.utc - Constants::QBT_SINCE_SKEW_SEC).iso8601
     end
+
+    # Use a deterministic start_date for backfills so that older-dated
+    # timesheets are included from a stable epoch. Allow disabling.
     params = {
-      start_date: start_d.to_s,
-      modified_since: timestamp_iso,
+      modified_since: ms,
       limit: limit,
-      page: page
+      page: page,
+      on_the_clock: 'both'
     }
+    unless Constants::QBT_DISABLE_START_DATE_WITH_SINCE
+      params[:start_date] = Constants::BACKFILL_EPOCH_DATE.to_s
+    end
     params[:supplemental_data] = supplemental ? 'yes' : 'no'
+    LOG.debug [:qbt_timesheets_params, params]
     api_request("timesheets?#{URI.encode_www_form(params)}", &blk)
   end
 
@@ -42,7 +50,8 @@ class QbtClient
       start_date: start_date,
       end_date: end_date,
       limit: limit,
-      page: page
+      page: page,
+      on_the_clock: 'both'
     }
     params[:supplemental_data] = supplemental ? 'yes' : 'no'
     api_request("timesheets?#{URI.encode_www_form(params)}", &blk)

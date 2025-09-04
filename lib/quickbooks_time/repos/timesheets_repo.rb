@@ -24,6 +24,20 @@ class TimesheetsRepo
     res = @db.exec_params(sql, [lookback_minutes])
     res.map { |r| r }
   end
+  
+  # Returns timesheets missing one or both Missive task IDs since a given date.
+  # Ordered oldest first to support deterministic backfills.
+  def unposted_since(start_date)
+    sql = <<~SQL
+      SELECT *
+      FROM quickbooks_time_timesheets
+      WHERE (missive_jobsite_task_id IS NULL OR missive_user_task_id IS NULL)
+        AND date >= $1
+      ORDER BY date ASC, COALESCE(start_time, created_qbt) ASC, id ASC
+    SQL
+    res = @db.exec_params(sql, [start_date])
+    res.map { |r| r }
+  end
 
   # Inserts or updates a timesheet. Returns [changed, previous_task_ids].
   def upsert(ts)
@@ -183,24 +197,32 @@ class TimesheetsRepo
       params << start_date
     end
 
+    #desired_expr = <<~SQL.strip
+    #  (
+    #    CASE
+    #      WHEN t.end_time IS NULL AND (
+    #        COALESCE(t.start_time, t.created_qbt) IS NULL
+    #        OR (now() - COALESCE(t.start_time, t.created_qbt)) <= interval '12 hours'
+    #      ) THEN 'in_progress'
+    #      ELSE 'closed'
+    #    END
+    #  )
+    #SQL
+
     desired_expr = <<~SQL.strip
-      (
-        CASE
-          WHEN t.end_time IS NULL AND (
-            COALESCE(t.start_time, t.created_qbt) IS NULL
-            OR (now() - COALESCE(t.start_time, t.created_qbt)) <= interval '12 hours'
-          ) THEN 'in_progress'
-          ELSE 'closed'
-        END
-      )
+      CASE
+        WHEN t.on_the_clock IS true
+        THEN 'in_progress'
+        ELSE 'closed'
+      END
     SQL
 
     where_clauses << <<~SQL.strip
       (
         t.missive_user_task_id IS NOT NULL AND t.missive_jobsite_task_id IS NOT NULL
         AND (
-          COALESCE(t.missive_user_task_state, t.missive_task_state) IS DISTINCT FROM #{desired_expr}
-          OR COALESCE(t.missive_jobsite_task_state, t.missive_task_state) IS DISTINCT FROM #{desired_expr}
+          COALESCE(t.missive_user_task_state, t.missive_user_task_state) IS DISTINCT FROM #{desired_expr}
+          OR COALESCE(t.missive_jobsite_task_state, t.missive_jobsite_task_state) IS DISTINCT FROM #{desired_expr}
         )
       )
     SQL
