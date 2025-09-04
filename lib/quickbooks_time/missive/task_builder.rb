@@ -151,10 +151,7 @@ class QuickbooksTime
           start_t = end_t = nil
         end
 
-        # Consider a timesheet "running" only if there is no end time yet.
-        # Avoid trusting on_the_clock if an end time exists (it can lag).
-        running = end_t.nil?
-        desired = running ? 'in_progress' : 'closed'
+        desired = on_the_clock ? 'in_progress' : 'closed'
 
         if desired == 'in_progress'
           reference_time = end_t || start_t
