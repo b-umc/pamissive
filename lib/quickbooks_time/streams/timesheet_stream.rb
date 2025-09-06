@@ -2,6 +2,7 @@
 
 require_relative '../../../logging/app_logger'
 LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
+require_relative '../../shared/dt'
 
 class TimesheetStream
   def initialize(qbt_client:, cursor_store:, limit:)
@@ -12,6 +13,16 @@ class TimesheetStream
 
   def each_batch(on_rows, &done)
     ts, id = @cursor.read
+    # Normalize DB cursor timestamp to UTC ISO for consistent comparisons
+    begin
+      t_norm = Shared::DT.parse_utc(ts, source: :db_input_time)
+      if t_norm
+        LOG.debug [:db_input_time, ts, :to, :internal_time, t_norm.iso8601]
+        ts = t_norm.iso8601
+      end
+    rescue StandardError
+      # ignore parse failures; use raw ts
+    end
     begin
       # Guard against a cursor that has drifted into the future which would
       # starve the modified_since polling. If detected, clamp to now-1s.
@@ -37,8 +48,28 @@ class TimesheetStream
       end
 
       rows = sort_rows(resp)
-      rows.reject! { |r| before_or_equal_cursor?(r, ts, id) }
-      LOG.debug [:timesheets_page, page, :count, rows.size, :more, resp['more']]
+      # Capture filter stats to understand why rows are excluded
+      before_count = rows.size
+      less_ts = 0
+      eq_ts_le_id = 0
+      rows.reject! do |r|
+        rid = r['id']
+        lm_t = Shared::DT.parse_utc(r['last_modified'])
+        ts_t = Shared::DT.parse_utc(ts)
+        drop = false
+        if lm_t && ts_t
+          if lm_t < ts_t
+            less_ts += 1
+            drop = true
+          elsif lm_t == ts_t && rid.to_i <= id.to_i
+            eq_ts_le_id += 1
+            drop = true
+          end
+        end
+        drop
+      end
+      rejected = before_count - rows.size
+      LOG.debug [:timesheets_page, page, :count, rows.size, :rejected, rejected, :less_ts, less_ts, :eq_ts_le_id, eq_ts_le_id, :more, resp['more']]
       on_rows.call(rows) if rows.any?
 
       last_row = rows.last || last_row
@@ -58,6 +89,7 @@ class TimesheetStream
             else
               ts_to_write = t.iso8601
             end
+            LOG.debug [:internal_output_time, t.iso8601, :to, :db_output_time, ts_to_write]
           rescue StandardError
             # leave ts_to_write as-is on parse error
           end
@@ -71,12 +103,17 @@ class TimesheetStream
 
   def sort_rows(resp)
     rows = resp.dig('results', 'timesheets')&.values || []
-    rows.sort_by { |r| [r['last_modified'], r['id']] }
+    rows.sort_by do |r|
+      lm = Shared::DT.parse_utc(r['last_modified'])
+      [lm ? lm.to_i : 0, r['id'].to_i]
+    end
   end
 
   def before_or_equal_cursor?(row, ts, id)
-    lm = row['last_modified']
     rid = row['id']
-    lm < ts || (lm == ts && rid.to_i <= id.to_i)
+    lm_t = Shared::DT.parse_utc(row['last_modified'])
+    ts_t = Shared::DT.parse_utc(ts)
+    return false unless lm_t && ts_t
+    (lm_t < ts_t) || (lm_t == ts_t && rid.to_i <= id.to_i)
   end
 end

@@ -34,6 +34,8 @@ class TimesheetsSyncer
           QuickbooksTime::Missive::Queue.enqueue_update_task(old_task_ids[:jobsite_task_id], update_payload)
         end
       end
+      # Kick the Missive queue after enqueuing updates (rate-limited inside)
+      QuickbooksTime::Missive::Queue.drain_global(repo: @ts_repo)
     end) do |ok|
       if ok
         OverviewRefresher.rebuild_many(touched.keys) { done&.call(true) }

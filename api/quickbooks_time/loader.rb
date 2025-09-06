@@ -44,6 +44,7 @@ full_resync = ENV['QBT_FULL_RESYNC'] == '1' || rebuild_timesheets
 ts_cursor   = CursorStore.new(db: db_conn, api_name: 'quickbooks_time_timesheets', full_resync: full_resync)
 user_cursor = CursorStore.new(db: db_conn, api_name: 'quickbooks_time_users', full_resync: full_resync)
 job_cursor  = CursorStore.new(db: db_conn, api_name: 'quickbooks_time_jobs', full_resync: full_resync)
+ts_deleted_cursor = CursorStore.new(db: db_conn, api_name: 'quickbooks_time_timesheets_deleted', full_resync: full_resync)
 queue           = QuickbooksTime::Missive::Queue
 missive_limiter = RateLimiter.new(interval: Constants::MISSIVE_POST_MIN_INTERVAL)
 QuickbooksTime::Missive::Client.global_limiter = missive_limiter
@@ -54,6 +55,7 @@ QBT = QuickbooksTime.new(
   timesheets_cursor: ts_cursor,
   users_cursor: user_cursor,
   jobs_cursor: job_cursor,
+  timesheets_deleted_cursor: ts_deleted_cursor,
   queue: queue,
   limiter: missive_limiter
 ) unless defined?(QBT)

@@ -83,6 +83,7 @@ class QuickbooksTime
           if remote_state && remote_state != desired_state
             payload = QuickbooksTime::Missive::TaskBuilder.build_task_update_payload(ts)
             QuickbooksTime::Missive::Queue.enqueue_update_task(task_id, payload)
+            QuickbooksTime::Missive::Queue.drain_global(repo: @repos.timesheets)
             LOG.info [:missive_verify_enqueue_update, ts['id'], task_id, :from, remote_state, :to, desired_state]
           else
             LOG.debug [:missive_verify_ok, ts['id'], task_id, :state, remote_state]

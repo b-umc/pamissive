@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../../../logging/app_logger'
+require_relative '../../shared/dt'
 LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 
 class JobsStream
@@ -25,9 +26,15 @@ class JobsStream
       end
 
       rows = resp.dig('results', 'jobcodes')&.values || []
-      rows.sort_by! { |r| [r['last_modified'], r['id']] }
+      rows.sort_by! do |r|
+        lm = Shared::DT.parse_utc(r['last_modified'])
+        [lm ? lm.to_i : 0, r['id'].to_i]
+      end
+
+      before_count = rows.size
       rows.reject! { |r| before_or_equal_cursor?(r, ts, id) }
-      LOG.debug [:jobs_page, page, :count, rows.size, :more, resp['more']]
+      rejected = before_count - rows.size
+      LOG.debug [:jobs_page, page, :count, rows.size, :rejected, rejected, :more, resp['more']]
       on_rows.call(rows) if rows.any?
 
       last_row = rows.last || last_row
@@ -43,8 +50,10 @@ class JobsStream
   end
 
   def before_or_equal_cursor?(row, ts, id)
-    lm = row['last_modified']
     rid = row['id']
-    lm < ts || (lm == ts && rid.to_i <= id.to_i)
+    lm_t = Shared::DT.parse_utc(row['last_modified'])
+    ts_t = Shared::DT.parse_utc(ts)
+    return false unless lm_t && ts_t
+    (lm_t < ts_t) || (lm_t == ts_t && rid.to_i <= id.to_i)
   end
 end

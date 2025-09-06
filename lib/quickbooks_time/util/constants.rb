@@ -14,6 +14,8 @@ module Constants
   # ~360 req/hour (≈1 every 10s). Use 10s by default, configurable via env.
   MISSIVE_POST_MIN_INTERVAL = ENV.fetch('MISSIVE_POST_MIN_INTERVAL', '10').to_f
   QBT_POLL_INTERVAL       = ENV.fetch('QBT_POLL_INTERVAL', '60').to_i
+  # Fast heartbeat to check QBT last_modified_timestamps
+  QBT_HEARTBEAT_INTERVAL  = ENV.fetch('QBT_HEARTBEAT_INTERVAL', '3').to_i
   QBT_TODAY_SCAN_INTERVAL = ENV.fetch('QBT_TODAY_SCAN_INTERVAL', '15').to_i
   QBT_SINCE_LOOKBACK_DAYS = ENV.fetch('QBT_SINCE_LOOKBACK_DAYS', '1').to_i
   # Seconds to subtract from the saved cursor when calling modified_since to

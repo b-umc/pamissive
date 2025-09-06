@@ -4,8 +4,11 @@ require 'time'
 require 'date'
 require 'tzinfo'
 require 'cgi'
+require_relative '../../../logging/app_logger'
+LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 require_relative '../util/constants'
 require_relative '../util/format'
+require_relative '../../shared/dt'
 
 class QuickbooksTime
   module Missive
@@ -15,6 +18,16 @@ class QuickbooksTime
       def self.fmt_hm(t)
         return nil unless t
         t.strftime('%-I:%M%P') # 9:30am
+      end
+
+      def self.truthy?(v)
+        case v
+        when true then true
+        when false, nil then false
+        else
+          s = v.to_s.strip.downcase
+          %w[true t 1 yes y].include?(s)
+        end
       end
 
       def self.fmt_dur(secs)
@@ -55,15 +68,7 @@ class QuickbooksTime
       # --- time parsing / conversion ----------------------------------------
 
       def self.parse_utc(s)
-        return nil if s.nil? || s.empty?
-        Time.iso8601(s)
-      rescue ArgumentError
-        s2 = s.tr(' ', 'T') if s.include?(' ') && s =~ /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:/
-        begin
-          Time.iso8601(s2)
-        rescue
-          Time.parse(s).utc
-        end
+        Shared::DT.parse_utc(s)
       end
 
       def self.compute_times(ts)
@@ -72,6 +77,7 @@ class QuickbooksTime
         secs    = (ts['duration_seconds'] || ts['duration'] || 0).to_i
         entry   = (ts['type'] || ts[:type] || ts['entry_type']).to_s.downcase
         date_s  = ts['date'] || ts[:date]
+        on_clk  = truthy?(ts['on_the_clock'] || ts[:on_the_clock])
 
         tzid = ts['user_tz'] || ts[:user_tz] || 'America/Vancouver'
         tz   = TZInfo::Timezone.get(tzid) rescue TZInfo::Timezone.get('UTC')
@@ -89,12 +95,17 @@ class QuickbooksTime
 
         #LOG.debug([:parsed_utc, start_utc: start_utc, end_utc: end_utc])
 
+        guessed_start = false
+        guessed_end   = false
+
         if start_utc.nil? && entry == 'manual' && date_s
           d = Date.parse(date_s) rescue nil
           #LOG.debug([:fallback_date, date: d])
           if d
             start_local = tz.local_time(d.year, d.month, d.day, 9, 30, 0)
             start_utc = tz.local_to_utc(start_local)
+            guessed_start = true
+            LOG.error [:dt_guess_start_time, ts['id'], :reason, :manual_entry_no_start, :date, date_s, :tz, tzid, :chosen_start, start_local]
             #LOG.debug([:fallback_start_set, start_local: start_local, start_utc: start_utc])
           end
         end
@@ -104,11 +115,27 @@ class QuickbooksTime
           #LOG.debug([:derived_end_utc, end_utc: end_utc])
         end
 
+        # Fallback: Some closed entries from QBT can have on_the_clock=false
+        # but no end time and zero duration temporarily. Use the last modified
+        # timestamp as a best-effort end time for display purposes.
+        if end_utc.nil? && start_utc && !on_clk && secs.to_i <= 0
+          mod_s = ts['modified_qbt'] || ts[:modified_qbt] || ts['last_modified'] || ts[:last_modified]
+          mod_utc = parse_utc(mod_s) rescue nil
+          if mod_utc && mod_utc > start_utc
+            end_utc = mod_utc
+            guessed_end = true
+            LOG.error [:dt_guess_end_time, ts['id'], :reason, :closed_no_end_or_duration, :start_utc, start_utc, :chosen_end_utc, end_utc]
+          end
+        end
+
         start_local = start_utc ? tz.utc_to_local(start_utc) : nil
         end_local   = end_utc   ? tz.utc_to_local(end_utc)   : nil
 
         #LOG.debug([:compute_times_out, start_local: start_local, end_local: end_local])
 
+        # Mark guesses on the timesheet hash for presentation
+        ts['__guessed_start'] = guessed_start if guessed_start
+        ts['__guessed_end']   = guessed_end if guessed_end
         [start_local, end_local]
       end
 
@@ -126,17 +153,29 @@ class QuickbooksTime
         secs    = (ts_get(ts, :duration_seconds, :duration) || 0).to_i
         tech    = ts_get(ts, :tech, :user_name, :employee_name) || 'Unknown Tech'
         jobsite = ts_get(ts, :jobsite_name, :jobsite, :job_name, :job) || 'Unknown Job'
+        on_clk  = truthy?(ts['on_the_clock'] || ts[:on_the_clock])
+
+        s_start = start_t && fmt_hm(start_t)
+        s_end   = end_t && fmt_hm(end_t)
+        s_start = "~#{s_start}" if s_start && ts['__guessed_start']
+        s_end   = "~#{s_end}"   if s_end   && ts['__guessed_end']
 
         time_s =
           if start_t && end_t
-            "#{fmt_hm(start_t)}–#{fmt_hm(end_t)}"
+            "#{s_start}–#{s_end}"
           elsif start_t
-            "#{fmt_hm(start_t)}–…"
+            "#{s_start}–…"
           else
             'time tbd'
           end
 
-        dur_s = secs.positive? ? fmt_dur(secs) : 'Clocked In'
+        # If we have both times, prefer computed duration even if secs is 0.
+        if start_t && end_t
+          dur_val = secs.positive? ? secs : (end_t.to_i - start_t.to_i)
+          dur_s = fmt_dur(dur_val)
+        else
+          dur_s = on_clk ? 'Clocked In' : fmt_dur(secs)
+        end
         base = "#{icon_for(ts)} #{tech} — #{jobsite} — #{time_s} (#{dur_s})"
         if deleted?(ts)
           "**deleted** ~~#{base}~~"
@@ -159,7 +198,7 @@ class QuickbooksTime
       # --- state + payloads --------------------------------------------------
 
       def self.determine_task_state(ts)
-        on_the_clock = ts['on_the_clock'] || ts[:on_the_clock]
+        on_the_clock = truthy?(ts['on_the_clock'] || ts[:on_the_clock])
         begin
           start_t, end_t = compute_times(ts)
         rescue StandardError

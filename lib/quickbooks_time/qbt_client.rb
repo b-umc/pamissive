@@ -7,6 +7,7 @@ require 'uri'
 require_relative '../../nonblock_HTTP/client/session'
 require_relative 'rate_limiter'
 require_relative 'util/constants'
+require_relative '../shared/dt'
 require_relative '../../logging/app_logger'
 LOG = AppLogger.setup(__FILE__, log_level: Logger::DEBUG) unless defined?(LOG)
 
@@ -21,11 +22,9 @@ class QbtClient
   def timesheets_modified_since(timestamp_iso, page: 1, limit: 50, supplemental: true, &blk)
     # Compute a robust modified_since in UTC, subtracting a small skew to avoid
     # missing rows that share the same second as the last sync.
-    ms = begin
-      (Time.parse(timestamp_iso).utc - Constants::QBT_SINCE_SKEW_SEC).iso8601
-    rescue
-      (Time.now.utc - Constants::QBT_SINCE_SKEW_SEC).iso8601
-    end
+    base = Shared::DT.parse_utc(timestamp_iso, source: :qbt_input_time) || Time.now.utc
+    ms = (base - Constants::QBT_SINCE_SKEW_SEC).iso8601
+    LOG.debug [:qbt_input_time, timestamp_iso, :to, :internal_time, base.iso8601]
 
     # Use a deterministic start_date for backfills so that older-dated
     # timesheets are included from a stable epoch. Allow disabling.
@@ -77,6 +76,18 @@ class QbtClient
     api_request("jobcodes?#{URI.encode_www_form(params)}", &blk)
   end
 
+  # Fetch last_modified_timestamps for all primary entities
+  def last_modified_timestamps(&blk)
+    api_request('last_modified_timestamps', &blk)
+  end
+
+  # Fetch timesheets deleted since timestamp. QBT returns rows with at least
+  # id and a deletion timestamp (e.g., 'deleted' or 'last_modified').
+  def timesheets_deleted_modified_since(timestamp_iso, page: 1, limit: 50, &blk)
+    params = { modified_since: timestamp_iso, page: page, per_page: limit }
+    api_request("timesheets_deleted?#{URI.encode_www_form(params)}", &blk)
+  end
+
   private
 
   def api_request(endpoint, &blk)
@@ -98,9 +109,14 @@ class QbtClient
         next
       end
 
-      if response.code == 404 && endpoint.start_with?('timesheets')
-        blk.call({ 'results' => { 'timesheets' => {} }, 'more' => false })
-        next
+      if response.code == 404
+        if endpoint.start_with?('timesheets_deleted')
+          blk.call({ 'results' => { 'timesheets_deleted' => {} }, 'more' => false })
+          next
+        elsif endpoint.start_with?('timesheets')
+          blk.call({ 'results' => { 'timesheets' => {} }, 'more' => false })
+          next
+        end
       end
 
       unless response.code == 200

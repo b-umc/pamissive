@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'date'
+require 'tzinfo'
 require_relative '../missive/task_builder'
 require_relative '../missive/queue'
 require_relative '../util/constants'
@@ -48,6 +49,9 @@ class TimesheetsTodayScanner
         end
       end
 
+      # Kick the Missive queue after enqueuing updates on this page
+      QuickbooksTime::Missive::Queue.drain_global(repo: @ts_repo)
+
       if resp['more']
         page += 1
         @qbt.timesheets_by_date(start_date: today.to_s, end_date: today.to_s, page: page, limit: Constants::QBT_PAGE_LIMIT, supplemental: true, &handle_page)
@@ -60,6 +64,5 @@ class TimesheetsTodayScanner
   rescue => e
     LOG.error [:timesheets_today_scan_failed, e.class, e.message]
     done&.call(false)
-require 'tzinfo'
   end
 end

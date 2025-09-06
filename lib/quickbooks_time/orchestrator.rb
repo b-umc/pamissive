@@ -3,23 +3,23 @@
 require_relative 'services/users_syncer'
 require_relative 'services/jobs_syncer'
 require_relative 'services/timesheets_syncer'
+require_relative 'services/timesheets_deleted_syncer'
 require_relative 'services/timesheets_today_scanner'
 require_relative 'services/timesheets_for_missive_creator'
 require_relative 'services/missive_task_verifier'
 require_relative 'missive/client'
 require_relative 'util/constants'
 require_relative '../../nonblock_socket/select_controller'
+require_relative '../shared/dt'
 
 class QuickbooksTime
   include TimeoutInterface
-  attr_reader :qbt, :repos, :timesheets_cursor, :users_cursor, :jobs_cursor, :queue, :limiter
+  attr_reader :qbt, :repos, :timesheets_cursor, :users_cursor, :jobs_cursor, :timesheets_deleted_cursor, :queue, :limiter
   attr_accessor :auth
 
   POLL_METHODS = [
-    :poll_users,
-    :poll_jobs,
-    :poll_timesheets,
-    :poll_timesheets_today,
+    :poll_last_modified,
+    #:poll_timesheets_today,
     :process_timesheets_for_missive_tasks,
     :reconcile_missive_task_states,
     :verify_missive_tasks,
@@ -28,18 +28,32 @@ class QuickbooksTime
 
   POLL_INTERVAL = Constants::QBT_POLL_INTERVAL
 
-  def initialize(qbt:, repos:, timesheets_cursor:, users_cursor:, jobs_cursor:, queue:, limiter:, auth: nil)
+  def initialize(qbt:, repos:, timesheets_cursor:, users_cursor:, jobs_cursor:, queue:, limiter:, auth: nil, timesheets_deleted_cursor: nil)
     @qbt = qbt
     @repos = repos
     @timesheets_cursor = timesheets_cursor
     @users_cursor = users_cursor
     @jobs_cursor = jobs_cursor
+    @timesheets_deleted_cursor = timesheets_deleted_cursor
     @queue = queue
     @limiter = limiter
     @auth = auth
     @polling_started = false
     @auth_ready = !!auth&.status
     @html_ready = false
+
+    @syncing_users = false
+    @syncing_jobs = false
+    @syncing_timesheets = false
+    @syncing_timesheets_deleted = false
+
+    # Track edge-triggered equality handling for last_modified heartbeat
+    @lm_edge_trigger = {
+      users: nil,
+      jobs: nil,
+      timesheets: nil,
+      timesheets_deleted: nil
+    }
   end
 
   def auth=(auth)
@@ -102,25 +116,101 @@ class QuickbooksTime
     end
   end
 
-  def poll_users
-    UsersSyncer.new(qbt, repos, users_cursor).run do |ok|
-      on_fail(:users) unless ok
-      add_timeout(method(:poll_users), POLL_INTERVAL)
+  def poll_last_modified
+    # Heartbeat: check last_modified_timestamps and only sync changed entities
+    qbt.last_modified_timestamps do |resp|
+      unless resp
+        add_timeout(method(:poll_last_modified), Constants::QBT_HEARTBEAT_INTERVAL)
+        next
+      end
+
+      lm = resp.dig('results', 'last_modified_timestamps') || resp['last_modified_timestamps'] || {}
+      LOG.debug [:qbt_last_modified_raw_remote, lm]
+      begin
+        users_remote = lm['users'] || lm[:users]
+        jobs_remote  = lm['jobcodes'] || lm[:jobcodes]
+        ts_remote    = lm['timesheets'] || lm[:timesheets]
+        ts_del_remote = lm['timesheets_deleted'] || lm[:timesheets_deleted]
+
+        users_local_ts, _ = users_cursor.read
+        jobs_local_ts, _  = jobs_cursor.read
+        ts_local_ts, _    = timesheets_cursor.read
+        ts_del_local_ts, _ = timesheets_deleted_cursor ? timesheets_deleted_cursor.read : [Constants::QBT_EPOCH_ISO, 0]
+        LOG.debug [:qbt_last_modified_raw_local, :users, users_local_ts, :jobs, jobs_local_ts, :timesheets, ts_local_ts, :timesheets_deleted, ts_del_local_ts]
+
+        users_remote_t   = Shared::DT.parse_utc(users_remote, source: :qbt_input_time)
+        jobs_remote_t    = Shared::DT.parse_utc(jobs_remote, source: :qbt_input_time)
+        ts_remote_t      = Shared::DT.parse_utc(ts_remote, source: :qbt_input_time)
+        ts_del_remote_t  = Shared::DT.parse_utc(ts_del_remote, source: :qbt_input_time)
+
+        users_local_t    = Shared::DT.parse_utc(users_local_ts, source: :db_input_time)
+        jobs_local_t     = Shared::DT.parse_utc(jobs_local_ts, source: :db_input_time)
+        ts_local_t       = Shared::DT.parse_utc(ts_local_ts, source: :db_input_time)
+        ts_del_local_t   = Shared::DT.parse_utc(ts_del_local_ts, source: :db_input_time)
+
+        LOG.debug [:qbt_last_modified_compare,
+          :users, users_remote_t&.iso8601, users_local_t&.iso8601,
+          :jobs, jobs_remote_t&.iso8601, jobs_local_t&.iso8601,
+          :timesheets, ts_remote_t&.iso8601, ts_local_t&.iso8601,
+          :timesheets_deleted, ts_del_remote_t&.iso8601, ts_del_local_t&.iso8601]
+
+        if users_remote_t && !@syncing_users && should_sync?(:users, users_remote_t, users_local_t)
+          @syncing_users = true
+          @lm_edge_trigger[:users] = users_remote_t
+          UsersSyncer.new(qbt, repos, users_cursor).run do |ok|
+            on_fail(:users) unless ok
+            @syncing_users = false
+          end
+        end
+
+        if jobs_remote_t && !@syncing_jobs && should_sync?(:jobs, jobs_remote_t, jobs_local_t)
+          @syncing_jobs = true
+          @lm_edge_trigger[:jobs] = jobs_remote_t
+          JobsSyncer.new(qbt, repos, jobs_cursor).run do |ok|
+            on_fail(:jobs) unless ok
+            @syncing_jobs = false
+          end
+        end
+
+        if ts_remote_t && !@syncing_timesheets && should_sync?(:timesheets, ts_remote_t, ts_local_t)
+          @syncing_timesheets = true
+          @lm_edge_trigger[:timesheets] = ts_remote_t
+          TimesheetsSyncer.new(qbt, repos, timesheets_cursor).backfill_all do |ok|
+            on_fail(:timesheets) unless ok
+            @syncing_timesheets = false
+          end
+        end
+
+        if timesheets_deleted_cursor && ts_del_remote_t && !@syncing_timesheets_deleted && should_sync?(:timesheets_deleted, ts_del_remote_t, ts_del_local_t)
+          @syncing_timesheets_deleted = true
+          @lm_edge_trigger[:timesheets_deleted] = ts_del_remote_t
+          TimesheetsDeletedSyncer.new(qbt, repos, timesheets_deleted_cursor).run do |ok|
+            on_fail(:timesheets_deleted) unless ok
+            @syncing_timesheets_deleted = false
+          end
+        end
+      rescue => e
+        LOG.error [:qbt_last_modified_process_error, e.class, e.message]
+      ensure
+        add_timeout(method(:poll_last_modified), Constants::QBT_HEARTBEAT_INTERVAL)
+      end
     end
   end
 
-  def poll_jobs
-    JobsSyncer.new(qbt, repos, jobs_cursor).run do |ok|
-      on_fail(:jobs) unless ok
-      add_timeout(method(:poll_jobs), POLL_INTERVAL)
+  # Decide if an entity should sync based on last_modified timestamps.
+  # Triggers when remote > local, or once when remote == local (edge-trigger)
+  def should_sync?(key, remote_t, local_t)
+    return true if local_t.nil?
+    return true if remote_t > local_t
+    if remote_t == local_t
+      if @lm_edge_trigger[key] != remote_t
+        LOG.debug [:qbt_last_modified_equal_edge_trigger, key, remote_t.iso8601]
+        return true
+      else
+        LOG.debug [:qbt_last_modified_equal_skip, key, remote_t.iso8601]
+      end
     end
-  end
-
-  def poll_timesheets
-    TimesheetsSyncer.new(qbt, repos, timesheets_cursor).backfill_all do |ok|
-      on_fail(:timesheets) unless ok
-      add_timeout(method(:poll_timesheets), POLL_INTERVAL)
-    end
+    false
   end
 
   # Faster cycle specifically for detecting in-progress timesheets today.
