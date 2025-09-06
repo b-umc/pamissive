@@ -114,6 +114,12 @@ class QuickbooksTime
 
       # --- builders (drop-in signatures) ------------------------------------
 
+      def self.deleted?(ts)
+        v = ts['deleted']
+        v = ts[:deleted] if v.nil?
+        v.to_s == 'true' || v == true || v == 't'
+      end
+
       # Title: "<icon> Tech — Job — 9:30am–5:50pm (7h 30m)"
       def self.build_task_title(ts)
         start_t, end_t = compute_times(ts)
@@ -131,14 +137,23 @@ class QuickbooksTime
           end
 
         dur_s = secs.positive? ? fmt_dur(secs) : 'Clocked In'
-        "#{icon_for(ts)} #{tech} — #{jobsite} — #{time_s} (#{dur_s})"
+        base = "#{icon_for(ts)} #{tech} — #{jobsite} — #{time_s} (#{dur_s})"
+        if deleted?(ts)
+          "**deleted** ~~#{base}~~"
+        else
+          base
+        end
       end
 
       # Description: notes only (HTML <br> + bullets). Empty -> non-breaking space.
       def self.build_task_description(ts, _start_t, _end_t)
         notes = normalize_notes(ts)
         return "&nbsp;" if notes.empty?
-        notes.map { |n| "&nbsp;&nbsp;• #{CGI.escapeHTML(n)}" }.join("<br>")
+        if deleted?(ts)
+          notes.map { |n| "<s>&nbsp;&nbsp;• #{CGI.escapeHTML(n)}</s>" }.join("<br>")
+        else
+          notes.map { |n| "&nbsp;&nbsp;• #{CGI.escapeHTML(n)}" }.join("<br>")
+        end
       end
 
       # --- state + payloads --------------------------------------------------
@@ -152,6 +167,7 @@ class QuickbooksTime
         end
 
         desired = on_the_clock ? 'in_progress' : 'closed'
+        desired = 'closed' if deleted?(ts)
 
         if desired == 'in_progress'
           reference_time = end_t || start_t

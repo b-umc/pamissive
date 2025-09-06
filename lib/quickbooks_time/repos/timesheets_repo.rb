@@ -101,7 +101,7 @@ class TimesheetsRepo
            SET quickbooks_time_jobsite_id=$1, user_id=$2, date=$3,
                duration_seconds=$4, notes=$5, last_hash=$6,
                entry_type=$7, start_time=$8, end_time=$9,
-               created_qbt=$10, modified_qbt=$11, on_the_clock=$13, updated_at=now()
+               created_qbt=$10, modified_qbt=$11, on_the_clock=$13, deleted=false, updated_at=now()
         WHERE id=$12',
         [job_id, user_id, date, secs, notes, hash, entry, start_t, end_t, created, modified, id, on_clock]
       )
@@ -145,6 +145,26 @@ class TimesheetsRepo
     update_job_task_state(id, state)
   end
 
+  # Fetch a single timesheet row by id
+  def find(id)
+    res = @db.exec_params('SELECT * FROM quickbooks_time_timesheets WHERE id=$1 LIMIT 1', [id])
+    res.ntuples.zero? ? nil : res[0]
+  end
+
+  # Delete a timesheet row by id
+  def delete(id)
+    @db.exec_params('DELETE FROM quickbooks_time_timesheets WHERE id=$1', [id])
+  end
+
+  # Mark a timesheet as deleted without removing it.
+  def mark_deleted(id, modified_ts=nil)
+    if modified_ts
+      @db.exec_params('UPDATE quickbooks_time_timesheets SET deleted=true, modified_qbt=$2, updated_at=now() WHERE id=$1', [id, modified_ts])
+    else
+      @db.exec_params('UPDATE quickbooks_time_timesheets SET deleted=true, updated_at=now() WHERE id=$1', [id])
+    end
+  end
+
   def tasks_to_create_or_update(start_date = nil)
     sql = <<~SQL
       SELECT t.*, j.name AS jobsite_name,
@@ -169,6 +189,9 @@ class TimesheetsRepo
         OR t.missive_jobsite_task_id IS NULL
       )
     SQL
+
+    # Do not create tasks for deleted timesheets
+    where_clauses << "COALESCE(t.deleted, false) IS NOT TRUE"
 
     sql << " WHERE #{where_clauses.join(' AND ')}" unless where_clauses.empty?
     sql << " ORDER BY t.date ASC, COALESCE(t.start_time, t.created_qbt) ASC"
