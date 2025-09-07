@@ -177,22 +177,72 @@ class QuickbooksTime
           dur_s = on_clk ? 'Clocked In' : fmt_dur(secs)
         end
         base = "#{icon_for(ts)} #{tech} — #{jobsite} — #{time_s} (#{dur_s})"
-        if deleted?(ts)
-          "**deleted** ~~#{base}~~"
-        else
-          base
-        end
+        title = if deleted?(ts)
+                  "**deleted** ~~#{base}~~"
+                else
+                  base
+                end
+        #tsid = ts_get(ts, :id)
+        #tsid ? (title + title_id_tag(tsid.to_s)) : title
       end
 
       # Description: notes only (HTML <br> + bullets). Empty -> non-breaking space.
       def self.build_task_description(ts, _start_t, _end_t)
         notes = normalize_notes(ts)
-        return "&nbsp;" if notes.empty?
-        if deleted?(ts)
-          notes.map { |n| "<s>&nbsp;&nbsp;• #{CGI.escapeHTML(n)}</s>" }.join("<br>")
-        else
-          notes.map { |n| "&nbsp;&nbsp;• #{CGI.escapeHTML(n)}" }.join("<br>")
+        body = if notes.empty?
+                 "&nbsp;".b
+               elsif deleted?(ts)
+                 notes.map { |n| "<s>&nbsp;&nbsp;• #{CGI.escapeHTML(n)}</s>" }.join("<br>")
+               else
+                 notes.map { |n| "&nbsp;&nbsp;• #{CGI.escapeHTML(n)}" }.join("<br>")
+               end
+        tsid = ts_get(ts, :id)
+        tsid ? (body + title_id_tag(tsid.to_s)) : body
+        #body
+      end
+
+      # --- id marker in title ----------------------------------------------
+      # Prefer an HTML tag trick that tends to survive Missive's sanitizer.
+      # Example: " <small><s>qbt:123456</s></small>" appended to the title.
+      def self.title_id_tag(id)
+        #"&nbsp; [comment]: # qbt:#{CGI.escapeHTML(id)}"
+        "----<p>[qbt:#{CGI.escapeHTML(id)}]"
+      end
+
+      # Try to extract an id from the title. Supports:
+      # - data-qbt-ts="ID" (if attributes survive)
+      # - visible tiny marker: qbt:ID inside the title
+      # - legacy zero-width encoding fallback
+      def self.extract_id_from_title(title)
+        return nil unless title
+        # 1) data attribute
+        m = title.match(/data-qbt-ts=['"]([^'"<>]+)['"]/)
+        return m[1] if m
+        # 2) visible tiny marker
+        m2 = title.match(/qbt:\s*([A-Za-z0-9_-]+)/)
+        return m2[1] if m2
+        # 3) zero-width legacy
+        begin
+          sent = "\u200D"
+          zw0 = "\u200B"
+          zw1 = "\u200C"
+          i1 = title.index(sent)
+          return nil unless i1
+          i2 = title.index(sent, i1 + 1)
+          return nil unless i2
+          payload = title[i1 + 1...i2]
+          return nil unless payload && payload.size.positive?
+          bits = payload.chars.map { |c| c == zw1 ? '1' : (c == zw0 ? '0' : nil) }.join
+          return nil if bits.nil? || bits.empty?
+          bytes = bits.scan(/.{8}/)
+          return nil if bytes.empty?
+          decoded = bytes.map { |b| b.to_i(2).chr }.join
+          decoded
+        rescue StandardError
+          nil
         end
+      rescue StandardError
+        nil
       end
 
       # --- state + payloads --------------------------------------------------

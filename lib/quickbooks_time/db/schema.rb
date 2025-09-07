@@ -11,6 +11,7 @@ class QuickbooksTime
         create_jobs(conn)
         ensure_jobs_columns(conn)
         create_sync_logs(conn)
+        create_summary_state(conn)
 
         if rebuild_timesheets
           rebuild_timesheets!(conn)
@@ -19,6 +20,19 @@ class QuickbooksTime
           ensure_timesheet_meta_columns(conn)
           create_timesheet_index(conn)
         end
+      end
+
+      def create_summary_state(conn)
+        conn.exec(<<~SQL)
+          CREATE TABLE IF NOT EXISTS quickbooks_time_summary_state (
+            conversation_id TEXT NOT NULL,
+            summary_type TEXT NOT NULL,
+            date DATE NOT NULL,
+            post_id TEXT,
+            updated_at TIMESTAMPTZ DEFAULT now(),
+            PRIMARY KEY (conversation_id, summary_type, date)
+          );
+        SQL
       end
 
       def create_users(conn)

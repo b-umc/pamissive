@@ -172,6 +172,21 @@ class QuickbooksTime
           end
         end
 
+        # If the remote timesheets timestamp is behind our stored cursor, our
+        # cursor likely drifted into the future. Rewind to the remote value to
+        # avoid starving syncs.
+        begin
+          if ts_remote_t && ts_local_t && (ts_remote_t < ts_local_t)
+            LOG.warn [:qbt_timesheets_cursor_rewind, :from, ts_local_t.iso8601, :to, ts_remote_t.iso8601]
+            # Reset the cursor id to 0 so ordering is driven solely by timestamp
+            @timesheets_cursor.write(ts_remote_t.iso8601, 0)
+            # Update our local snapshot used for comparisons below
+            ts_local_t = ts_remote_t
+          end
+        rescue StandardError => e
+          LOG.error [:qbt_timesheets_cursor_rewind_error, e.class, e.message]
+        end
+
         if ts_remote_t && !@syncing_timesheets && should_sync?(:timesheets, ts_remote_t, ts_local_t)
           @syncing_timesheets = true
           @lm_edge_trigger[:timesheets] = ts_remote_t
@@ -179,6 +194,17 @@ class QuickbooksTime
             on_fail(:timesheets) unless ok
             @syncing_timesheets = false
           end
+        end
+
+        # Apply the same rewind guard for the deleted stream
+        begin
+          if ts_del_remote_t && ts_del_local_t && (ts_del_remote_t < ts_del_local_t)
+            LOG.warn [:qbt_timesheets_deleted_cursor_rewind, :from, ts_del_local_t.iso8601, :to, ts_del_remote_t.iso8601]
+            @timesheets_deleted_cursor.write(ts_del_remote_t.iso8601, 0)
+            ts_del_local_t = ts_del_remote_t
+          end
+        rescue StandardError => e
+          LOG.error [:qbt_timesheets_deleted_cursor_rewind_error, e.class, e.message]
         end
 
         if timesheets_deleted_cursor && ts_del_remote_t && !@syncing_timesheets_deleted && should_sync?(:timesheets_deleted, ts_del_remote_t, ts_del_local_t)

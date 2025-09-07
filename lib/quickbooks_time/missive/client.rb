@@ -59,6 +59,17 @@ class QuickbooksTime
         enqueue(:get, "conversations/#{conversation_id}/comments?#{qs.join('&')}", nil, &blk)
       end
 
+      # --- posts (for summaries, etc.) -------------------------------------
+
+      def create_post(payload, &blk)
+        # payload should be a Hash of post attributes (not wrapped)
+        enqueue(:post, 'posts', { posts: payload }, &blk)
+      end
+
+      def delete_post(post_id, &blk)
+        enqueue(:delete, "posts/#{post_id}", nil, &blk)
+      end
+
       private
 
       def enqueue(verb, path, payload, &blk)
@@ -119,6 +130,10 @@ class QuickbooksTime
           end
         when :get
           @channel.channel_get(path) do |res|
+            blk.call(res.code, res.headers.to_h, parse_body(res.body))
+          end
+        when :delete
+          @channel.channel_delete(path) do |res|
             blk.call(res.code, res.headers.to_h, parse_body(res.body))
           end
         end

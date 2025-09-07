@@ -274,6 +274,75 @@ class TimesheetsRepo
     true
   end
 
+  # Returns daily summary for a conversation and date.
+  # type: :job summarizes by user for a job conversation
+  # type: :user summarizes by job for a user conversation
+  def daily_summary_for_conversation(conversation_id:, type:, date:)
+    type = type.to_sym
+    date = date.to_s
+    case type
+    when :job
+      sql = <<~SQL
+        SELECT t.user_id,
+               COALESCE((u.first_name || ' ' || u.last_name), 'User ' || t.user_id::text) AS label,
+               SUM(COALESCE(t.duration_seconds,0)) AS seconds
+        FROM quickbooks_time_timesheets t
+        LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
+        WHERE t.missive_jobsite_task_conversation_id = $1
+          AND t.date = $2
+          AND COALESCE(t.deleted, false) IS NOT TRUE
+        GROUP BY t.user_id, u.first_name, u.last_name
+        ORDER BY label ASC
+      SQL
+    when :user
+      sql = <<~SQL
+        SELECT t.quickbooks_time_jobsite_id,
+               COALESCE(j.name, 'Job ' || t.quickbooks_time_jobsite_id::text) AS label,
+               SUM(COALESCE(t.duration_seconds,0)) AS seconds
+        FROM quickbooks_time_timesheets t
+        LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
+        WHERE t.missive_user_task_conversation_id = $1
+          AND t.date = $2
+          AND COALESCE(t.deleted, false) IS NOT TRUE
+        GROUP BY t.quickbooks_time_jobsite_id, j.name
+        ORDER BY label ASC
+      SQL
+    else
+      return { items: [], total_seconds: 0 }
+    end
+
+    res = @db.exec_params(sql, [conversation_id.to_s, date])
+    items = (res || []).map do |r|
+      { label: r['label'], seconds: r['seconds'].to_i }
+    end
+    total = items.reduce(0) { |acc, it| acc + it[:seconds].to_i }
+    { items: items, total_seconds: total }
+  end
+
+  # --- Daily summary post state --------------------------------------------
+
+  def get_summary_post_id(conversation_id:, type:, date:)
+    sql = 'SELECT post_id FROM quickbooks_time_summary_state WHERE conversation_id=$1 AND summary_type=$2 AND date=$3 LIMIT 1'
+    res = @db.exec_params(sql, [conversation_id.to_s, type.to_s, date.to_s])
+    return nil if res.ntuples.zero?
+    res[0]['post_id']
+  end
+
+  def save_summary_post_id(conversation_id:, type:, date:, post_id:)
+    sql = <<~SQL
+      INSERT INTO quickbooks_time_summary_state (conversation_id, summary_type, date, post_id, updated_at)
+      VALUES ($1,$2,$3,$4, now())
+      ON CONFLICT (conversation_id, summary_type, date)
+      DO UPDATE SET post_id=EXCLUDED.post_id, updated_at=now()
+    SQL
+    @db.exec_params(sql, [conversation_id.to_s, type.to_s, date.to_s, post_id.to_s])
+  end
+
+  def clear_summary_post_id(conversation_id:, type:, date:)
+    sql = 'DELETE FROM quickbooks_time_summary_state WHERE conversation_id=$1 AND summary_type=$2 AND date=$3'
+    @db.exec_params(sql, [conversation_id.to_s, type.to_s, date.to_s])
+  end
+
   # Returns the paired conversation ID for a given task or conversation.
   # If +task_id+ is provided, it will look up the timesheet that owns that
   # task and return the conversation ID for the opposite side (user vs

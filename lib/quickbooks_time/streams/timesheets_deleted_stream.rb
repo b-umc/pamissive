@@ -52,8 +52,19 @@ class TimesheetsDeletedStream
         if last_row
           lm = Shared::DT.parse_utc(deleted_ts(last_row))
           if lm
-            LOG.debug [:internal_output_time, lm.iso8601, :to, :db_output_time, lm.iso8601]
-            @cursor.write(lm.iso8601, last_row['id'])
+            begin
+              # Clamp any future timestamp to now-1s to avoid cursor drift
+              if lm > Time.now.utc
+                clamped = (Time.now.utc - 1)
+                LOG.warn [:qbt_deleted_last_modified_in_future_clamped, lm.iso8601, :clamped_to, clamped.iso8601]
+                @cursor.write(clamped.iso8601, last_row['id'])
+              else
+                LOG.debug [:internal_output_time, lm.iso8601, :to, :db_output_time, lm.iso8601]
+                @cursor.write(lm.iso8601, last_row['id'])
+              end
+            rescue StandardError
+              @cursor.write(lm.iso8601, last_row['id'])
+            end
           else
             @cursor.write(deleted_ts(last_row), last_row['id'])
           end

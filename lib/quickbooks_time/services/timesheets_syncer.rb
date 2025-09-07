@@ -3,6 +3,7 @@
 require_relative '../missive/task_builder'
 require_relative '../missive/queue'
 require_relative '../streams/timesheet_stream'
+require_relative '../missive/summary_queue'
 require_relative 'overview_refresher'
 
 class TimesheetsSyncer
@@ -32,6 +33,29 @@ class TimesheetsSyncer
           
           QuickbooksTime::Missive::Queue.enqueue_update_task(old_task_ids[:user_task_id], update_payload)
           QuickbooksTime::Missive::Queue.enqueue_update_task(old_task_ids[:jobsite_task_id], update_payload)
+
+          # Enqueue summaries for both conversations for the affected date.
+          begin
+            row = @ts_repo.find(ts['id'])
+            if row
+              if row['missive_user_task_conversation_id']
+                QuickbooksTime::Missive::SummaryQueue.enqueue(
+                  conversation_id: row['missive_user_task_conversation_id'],
+                  type: :user,
+                  date: ts['date']
+                )
+              end
+              if row['missive_jobsite_task_conversation_id']
+                QuickbooksTime::Missive::SummaryQueue.enqueue(
+                  conversation_id: row['missive_jobsite_task_conversation_id'],
+                  type: :job,
+                  date: ts['date']
+                )
+              end
+            end
+          rescue => e
+            LOG.error [:summary_enqueue_on_update_error, e.class, e.message]
+          end
         end
       end
       # Kick the Missive queue after enqueuing updates (rate-limited inside)

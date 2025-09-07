@@ -2,6 +2,7 @@
 
 require_relative '../missive/task_builder'
 require_relative '../missive/task_sync'
+require_relative '../missive/summary_queue'
 require_relative '../missive/client'
 require_relative '../util/constants'
 require_relative '../../../logging/app_logger'
@@ -58,6 +59,26 @@ class TimesheetsForMissiveCreator
         )
       end
       callback.call
+
+      # Enqueue summaries for both conversations (if known)
+      begin
+        if tasks[:user] && tasks[:user]['conversation']
+          QuickbooksTime::Missive::SummaryQueue.enqueue(
+            conversation_id: tasks[:user]['conversation'],
+            type: :user,
+            date: ts['date']
+          )
+        end
+        if tasks[:job] && tasks[:job]['conversation']
+          QuickbooksTime::Missive::SummaryQueue.enqueue(
+            conversation_id: tasks[:job]['conversation'],
+            type: :job,
+            date: ts['date']
+          )
+        end
+      rescue => e
+        LOG.error [:summary_enqueue_on_create_error, e.class, e.message]
+      end
     end
   end
 end

@@ -87,14 +87,16 @@ class QuickbooksTime
         user_name = ts['user_name'] || UserName.lookup(ts['user_id'])
 
         team = ENV.fetch('QBT_POST_TEAM', nil)
-        org  = ENV.fetch('MISSIVE_ORG_ID', nil) if team
+        org  = ENV.fetch('MISSIVE_ORG_ID', nil)
         common = {
           username: 'QuickBooks Time',
           team: team,
           force_team: !team.nil?,
           organization: org,
           add_to_inbox: false,
-          add_to_team_inbox: false
+          add_to_team_inbox: false,
+          close: true,
+          reopen: false
         }
 
         {
@@ -116,14 +118,16 @@ class QuickbooksTime
         user_name = ts['user_name'] || UserName.lookup(user_id)
 
         team = ENV.fetch('QBT_POST_TEAM', nil)
-        org  = ENV.fetch('MISSIVE_ORG_ID', nil) if team
+        org  = ENV.fetch('MISSIVE_ORG_ID', nil)
         common = {
           username: 'QuickBooks Time',
           team: team,
           force_team: !team.nil?,
           organization: org,
           add_to_inbox: false,
-          add_to_team_inbox: false
+          add_to_team_inbox: false,
+          close: true,
+          reopen: false
         }
 
         {
@@ -137,6 +141,8 @@ class QuickbooksTime
       end
 
       def self.overview(job_id, md, status_color)
+        team = ENV.fetch('QBT_POST_TEAM', nil)
+        org  = ENV.fetch('MISSIVE_ORG_ID', nil)
         {
           posts: {
             references: ["qbt:job:#{job_id}"],
@@ -144,7 +150,10 @@ class QuickbooksTime
             conversation_subject: "QuickBooks Time: #{JobName.lookup(job_id)}",
             notification: { title: "QBT Overview • #{JobName.lookup(job_id)}", body: ::Util::Format.notif_from_md(md, 180) },
             attachments: [{ markdown: md, timestamp: Time.now.to_i, color: status_color }],
-            add_to_inbox: false, add_to_team_inbox: false
+            add_to_inbox: false,
+            add_to_team_inbox: false,
+            team: team,
+            organization: org
           }
         }
       end

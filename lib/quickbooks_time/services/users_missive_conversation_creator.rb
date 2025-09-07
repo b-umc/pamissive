@@ -32,7 +32,8 @@ class UsersMissiveConversationCreator
         references: ["qbt:user:#{user_id}"],
         conversation_subject: "QuickBooks Time: #{user_name}",
         notification: { title: "Timesheet • #{user_name}", body: ::Util::Format.notif_from_md(markdown) },
-        attachments: [{ markdown: markdown }]
+        attachments: [{ markdown: markdown }],
+        organization: ENV.fetch('MISSIVE_ORG_ID', nil)
       }
     }
     @missive_client.post(payload) do |response|

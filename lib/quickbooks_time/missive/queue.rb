@@ -3,6 +3,7 @@
 require 'json'
 require_relative '../../../nonblock_socket/select_controller'
 require_relative 'client'
+require_relative 'summary_queue'
 
 
 class QuickbooksTime
@@ -85,7 +86,10 @@ class QuickbooksTime
           # Fallback to generic tasks
           task = @q.shift
           unless task
-            @draining = false
+            # No more task work; attempt to drain summary queue next.
+            QuickbooksTime::Missive::SummaryQueue.drain(client: client, repo: repo) do
+              @draining = false
+            end
             return
           end
 

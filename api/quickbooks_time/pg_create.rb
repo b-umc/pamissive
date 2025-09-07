@@ -62,6 +62,16 @@ class QuickbooksTime
           created TIMESTAMPTZ,
           raw JSONB
         );
+      },
+      'quickbooks_time_summary_state' => %{
+        CREATE TABLE IF NOT EXISTS quickbooks_time_summary_state (
+          conversation_id TEXT NOT NULL,
+          summary_type TEXT NOT NULL,
+          date DATE NOT NULL,
+          post_id TEXT,
+          updated_at TIMESTAMPTZ DEFAULT now(),
+          PRIMARY KEY (conversation_id, summary_type, date)
+        );
       }
     }.freeze
 

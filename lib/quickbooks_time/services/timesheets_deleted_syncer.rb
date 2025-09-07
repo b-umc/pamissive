@@ -2,6 +2,7 @@
 
 require_relative '../streams/timesheets_deleted_stream'
 require_relative '../missive/queue'
+require_relative '../missive/summary_queue'
 require_relative 'overview_refresher'
 require_relative '../../../logging/app_logger'
 
@@ -44,6 +45,26 @@ class TimesheetsDeletedSyncer
               QuickbooksTime::Missive::Queue.enqueue_update_task(existing['missive_jobsite_task_id'], update_payload)
             end
             QuickbooksTime::Missive::Queue.drain_global(repo: @ts_repo)
+
+            # Enqueue summary updates for the day
+            begin
+              if existing['missive_user_task_conversation_id']
+                QuickbooksTime::Missive::SummaryQueue.enqueue(
+                  conversation_id: existing['missive_user_task_conversation_id'],
+                  type: :user,
+                  date: existing['date']
+                )
+              end
+              if existing['missive_jobsite_task_conversation_id']
+                QuickbooksTime::Missive::SummaryQueue.enqueue(
+                  conversation_id: existing['missive_jobsite_task_conversation_id'],
+                  type: :job,
+                  date: existing['date']
+                )
+              end
+            rescue => e
+              LOG.warn [:summary_enqueue_on_delete_failed, id, e.message]
+            end
           rescue StandardError => e
             LOG.warn [:timesheet_delete_update_failed, id, e.message]
           end
