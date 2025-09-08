@@ -88,11 +88,23 @@ end
 
 class SelectController
   MAX_SOCKS = 50
-  CALL_TIMEOUT = 2
+  CALL_TIMEOUT = (ENV.fetch('SELECT_CALLBACK_TIMEOUT_SEC', '10').to_f rescue 10.0)
   @instance = nil
   class << self
     def instance
       @instance ||= new
+    end
+
+    def add_timeout(callback_proc, duration)
+      instance.add_timeout(callback_proc, duration)
+    end
+
+    def timeout?(callback_proc)
+      instance.timeout?(callback_proc)
+    end
+
+    def remove_timeout(callback_proc)
+      instance.remove_timeout(callback_proc)
     end
 
     def run

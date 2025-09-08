@@ -5,8 +5,8 @@ require 'time'
 
 module Constants
   # Deterministic epoch for all backfills and initial syncs
-  BACKFILL_EPOCH_DATE = Date.new(2023, 1, 1)
-  QBT_EPOCH_ISO       = Time.utc(2023, 1, 1).iso8601
+  BACKFILL_EPOCH_DATE = Date.new(2024, 1, 1)
+  QBT_EPOCH_ISO       = Time.utc(2024, 1, 1).iso8601
 
   QBT_PAGE_LIMIT          = ENV.fetch('QBT_PAGE_LIMIT', '200').to_i
   QBT_RATE_INTERVAL       = ENV.fetch('QBT_RATE_INTERVAL', '0.2').to_f
@@ -32,6 +32,10 @@ module Constants
   MISSIVE_BACKFILL_MONTHS = ENV.fetch('MISSIVE_BACKFILL_MONTHS', '0').to_i
   MISSIVE_WEBHOOK_WAIT_SEC = ENV.fetch('MISSIVE_WEBHOOK_WAIT_SEC', '4').to_i
   QBT_DEFAULT_TZ          = ENV.fetch('QBT_DEFAULT_TZ', 'America/Vancouver')
+  MISSIVE_USE_TASKS       = ENV.fetch('MISSIVE_USE_TASKS', '1') == '1'
+  MISSIVE_LIVE_UPDATES    = ENV.fetch('MISSIVE_LIVE_UPDATES', '1') == '1'
+  MISSIVE_DEFER_DURING_FULL_RESYNC = ENV.fetch('MISSIVE_DEFER_DURING_FULL_RESYNC', '1') == '1'
+  MISSIVE_SUMMARY_SINGLE_PER_CONVERSATION = ENV.fetch('MISSIVE_SUMMARY_SINGLE_PER_CONVERSATION', '1') == '1'
 
   STATUS_COLORS = {
     'unbilled'    => '#2266ED',

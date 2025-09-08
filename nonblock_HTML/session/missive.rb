@@ -10,6 +10,7 @@ class NonBlockHTML::Server::Session; end
 class NonBlockHTML::Server::Session::Missive
   CONV_REGISTER = %[
     const socket = event.detail.socketWrapper;
+    window.__ws = socket;
 
     if (!registeredForMissiveChanges) {
       Missive.on( 'change:conversations',

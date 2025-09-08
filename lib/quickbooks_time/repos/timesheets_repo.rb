@@ -42,7 +42,9 @@ class TimesheetsRepo
   # Inserts or updates a timesheet. Returns [changed, previous_task_ids].
   def upsert(ts)
     id        = ts['id'] || ts[:id]
-    job_id    = ts['jobcode_id'] || ts[:jobcode_id]
+    # Prefer explicit jobcode_id; fall back to nested jobcode.id or any
+    # previously-mapped quickbooks_time_jobsite_id if present on the payload.
+    job_id    = ts['jobcode_id'] || ts[:jobcode_id] || (ts['jobcode'] && (ts['jobcode']['id'] || ts['jobcode'][:id])) || ts['quickbooks_time_jobsite_id'] || ts[:quickbooks_time_jobsite_id]
     user_id   = ts['user_id'] || ts[:user_id]
     date      = ts['date'] || ts[:date]
     secs      = (ts['duration'] || ts[:duration]).to_i
@@ -68,6 +70,15 @@ class TimesheetsRepo
     end_t     = nil if end_t.nil? || end_t == ''
     created   = nil if created.nil? || created == ''
     modified  = nil if modified.nil? || modified == ''
+
+    # Basic guardrails: log any rows lacking a usable job id for debugging.
+    if job_id.to_i <= 0
+      begin
+        LOG.warn [:timesheet_missing_job_ref, id, :jobcode_id, ts['jobcode_id'], :jobcode_nested, (ts['jobcode'] && (ts['jobcode']['id'] || ts['jobcode'][:id])), :fallback_jobsite_id, ts['quickbooks_time_jobsite_id']]
+      rescue StandardError
+        # logging best-effort only
+      end
+    end
 
     # Include on_the_clock in the change fingerprint so that clock-in/out
     # transitions trigger an update and downstream state reconciliation.
@@ -319,6 +330,180 @@ class TimesheetsRepo
     { items: items, total_seconds: total }
   end
 
+  # Daily summary for a specific job (by users) and date.
+  def daily_summary_for_job(job_id:, date:)
+    sql = <<~SQL
+      SELECT t.user_id,
+             COALESCE((u.first_name || ' ' || u.last_name), 'User ' || t.user_id::text) AS label,
+             SUM(COALESCE(t.duration_seconds,0)) AS seconds
+      FROM quickbooks_time_timesheets t
+      LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
+      WHERE t.quickbooks_time_jobsite_id = $1
+        AND t.date = $2
+        AND COALESCE(t.deleted, false) IS NOT TRUE
+      GROUP BY t.user_id, u.first_name, u.last_name
+      ORDER BY label ASC
+    SQL
+    res = @db.exec_params(sql, [job_id.to_s, date.to_s])
+    items = (res || []).map { |r| { label: r['label'], seconds: r['seconds'].to_i } }
+    total = items.reduce(0) { |acc, it| acc + it[:seconds].to_i }
+    { items: items, total_seconds: total }
+  end
+
+  # Daily summary for a specific user (by jobs) and date.
+  def daily_summary_for_user(user_id:, date:)
+    sql = <<~SQL
+      SELECT t.quickbooks_time_jobsite_id,
+             COALESCE(j.name, 'Job ' || t.quickbooks_time_jobsite_id::text) AS label,
+             SUM(COALESCE(t.duration_seconds,0)) AS seconds
+      FROM quickbooks_time_timesheets t
+      LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
+      WHERE t.user_id = $1
+        AND t.date = $2
+        AND COALESCE(t.deleted, false) IS NOT TRUE
+      GROUP BY t.quickbooks_time_jobsite_id, j.name
+      ORDER BY label ASC
+    SQL
+    res = @db.exec_params(sql, [user_id.to_s, date.to_s])
+    items = (res || []).map { |r| { label: r['label'], seconds: r['seconds'].to_i } }
+    total = items.reduce(0) { |acc, it| acc + it[:seconds].to_i }
+    { items: items, total_seconds: total }
+  end
+
+  # All-time summary for a specific job (by users).
+  def all_time_summary_for_job(job_id:)
+    sql = <<~SQL
+      SELECT t.user_id,
+             COALESCE((u.first_name || ' ' || u.last_name), 'User ' || t.user_id::text) AS label,
+             SUM(COALESCE(t.duration_seconds,0)) AS seconds
+      FROM quickbooks_time_timesheets t
+      LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
+      WHERE t.quickbooks_time_jobsite_id = $1
+        AND COALESCE(t.deleted, false) IS NOT TRUE
+      GROUP BY t.user_id, u.first_name, u.last_name
+      ORDER BY label ASC
+    SQL
+    res = @db.exec_params(sql, [job_id.to_s])
+    items = (res || []).map { |r| { label: r['label'], seconds: r['seconds'].to_i } }
+    total = items.reduce(0) { |acc, it| acc + it[:seconds].to_i }
+    { items: items, total_seconds: total }
+  end
+
+  # All-time summary for a specific user (by jobs).
+  def all_time_summary_for_user(user_id:)
+    sql = <<~SQL
+      SELECT t.quickbooks_time_jobsite_id,
+             COALESCE(j.name, 'Job ' || t.quickbooks_time_jobsite_id::text) AS label,
+             SUM(COALESCE(t.duration_seconds,0)) AS seconds
+      FROM quickbooks_time_timesheets t
+      LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
+      WHERE t.user_id = $1
+        AND COALESCE(t.deleted, false) IS NOT TRUE
+      GROUP BY t.quickbooks_time_jobsite_id, j.name
+      ORDER BY label ASC
+    SQL
+    res = @db.exec_params(sql, [user_id.to_s])
+    items = (res || []).map { |r| { label: r['label'], seconds: r['seconds'].to_i } }
+    total = items.reduce(0) { |acc, it| acc + it[:seconds].to_i }
+    { items: items, total_seconds: total }
+  end
+
+  # Raw timesheets for a user since a given date (inclusive),
+  # enriched with job name and timezone offset for presentation.
+  def user_timesheets_since(user_id:, since_date:)
+    sql = <<~SQL
+      SELECT t.*, j.name AS jobsite_name,
+             u.timezone_offset AS user_tz_offset
+      FROM quickbooks_time_timesheets t
+      LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
+      LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
+      WHERE t.user_id = $1
+        AND COALESCE(t.deleted, false) IS NOT TRUE
+        AND t.date >= $2
+      ORDER BY t.date ASC, COALESCE(t.start_time, t.created_qbt) ASC, t.id ASC
+    SQL
+    res = @db.exec_params(sql, [user_id.to_s, since_date.to_s])
+    res.map { |r| r }
+  end
+
+  # Raw timesheets for a job since a given date (inclusive),
+  # enriched with user name and job name for presentation.
+  def job_timesheets_since(job_id:, since_date:)
+    sql = <<~SQL
+      SELECT t.*, j.name AS jobsite_name,
+             (u.first_name || ' ' || u.last_name) AS user_name,
+             u.timezone_offset AS user_tz_offset
+      FROM quickbooks_time_timesheets t
+      LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
+      LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
+      WHERE t.quickbooks_time_jobsite_id = $1
+        AND COALESCE(t.deleted, false) IS NOT TRUE
+        AND t.date >= $2
+      ORDER BY t.date ASC, COALESCE(t.start_time, t.created_qbt) ASC, t.id ASC
+    SQL
+    res = @db.exec_params(sql, [job_id.to_s, since_date.to_s])
+    res.map { |r| r }
+  end
+
+  # Returns currently clocked-in timesheets for a job.
+  # Useful to show who is on the clock right now at a jobsite.
+  def job_active_clockins(job_id:)
+    sql = <<~SQL
+      SELECT t.*, j.name AS jobsite_name,
+             (u.first_name || ' ' || u.last_name) AS user_name,
+             u.timezone_offset AS user_tz_offset
+      FROM quickbooks_time_timesheets t
+      LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
+      LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
+      WHERE t.quickbooks_time_jobsite_id = $1
+        AND COALESCE(t.deleted, false) IS NOT TRUE
+        AND COALESCE(t.on_the_clock, false) IS TRUE
+      ORDER BY COALESCE(t.start_time, t.created_qbt) ASC, t.id ASC
+    SQL
+    res = @db.exec_params(sql, [job_id.to_s])
+    res.map { |r| r }
+  end
+
+  # Weekly totals for a job across all history.
+  # Returns array of { week_start: 'YYYY-MM-DD', seconds: Integer } ordered by week.
+  def job_weekly_totals(job_id:)
+    sql = <<~SQL
+      SELECT (date_trunc('week', t.date::timestamp))::date AS week_start,
+             SUM(COALESCE(t.duration_seconds, 0)) AS seconds
+      FROM quickbooks_time_timesheets t
+      WHERE t.quickbooks_time_jobsite_id = $1
+        AND COALESCE(t.deleted, false) IS NOT TRUE
+      GROUP BY date_trunc('week', t.date::timestamp)
+      ORDER BY week_start ASC
+    SQL
+    res = @db.exec_params(sql, [job_id.to_s])
+    (res || []).map { |r| { week_start: r['week_start'], seconds: r['seconds'].to_i } }
+  end
+
+  # Distinct user ids present in timesheets (non-deleted)
+  def distinct_user_ids
+    sql = <<~SQL
+      SELECT DISTINCT user_id FROM quickbooks_time_timesheets
+      WHERE COALESCE(deleted, false) IS NOT TRUE
+      ORDER BY user_id ASC
+    SQL
+    res = @db.exec(sql)
+    res.map { |r| r['user_id'] }
+  end
+
+  # Distinct job ids present in timesheets (non-deleted)
+  def distinct_job_ids
+    sql = <<~SQL
+      SELECT DISTINCT quickbooks_time_jobsite_id FROM quickbooks_time_timesheets
+      WHERE COALESCE(deleted, false) IS NOT TRUE
+        AND quickbooks_time_jobsite_id IS NOT NULL
+        AND quickbooks_time_jobsite_id <> 0
+      ORDER BY quickbooks_time_jobsite_id ASC
+    SQL
+    res = @db.exec(sql)
+    res.map { |r| r['quickbooks_time_jobsite_id'] }
+  end
+
   # --- Daily summary post state --------------------------------------------
 
   def get_summary_post_id(conversation_id:, type:, date:)
@@ -397,5 +582,75 @@ class TimesheetsRepo
     end
 
     nil
+  end
+
+  # Fetch timesheets for a jobsite conversation with optional date range.
+  # Results are enriched with jobsite and user names for presentation.
+  #
+  # @param conversation_id [String] Missive conversation id for the jobsite
+  # @param start_date [String, Date, nil] inclusive lower bound (YYYY-MM-DD)
+  # @param end_date [String, Date, nil] inclusive upper bound (YYYY-MM-DD)
+  # @return [Array<Hash>]
+  def timesheets_for_job_conversation(conversation_id, start_date: nil, end_date: nil)
+    where = [
+      't.missive_jobsite_task_conversation_id = $1',
+      'COALESCE(t.deleted, false) IS NOT TRUE'
+    ]
+    params = [conversation_id.to_s]
+
+    if start_date
+      where << "t.date >= $#{params.length + 1}"
+      params << start_date.to_s
+    end
+
+    if end_date
+      where << "t.date <= $#{params.length + 1}"
+      params << end_date.to_s
+    end
+
+    sql = <<~SQL
+      SELECT t.*,
+             j.name AS jobsite_name,
+             (u.first_name || ' ' || u.last_name) AS user_name
+      FROM quickbooks_time_timesheets t
+      LEFT JOIN quickbooks_time_jobs j ON j.id = t.quickbooks_time_jobsite_id
+      LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
+      WHERE #{where.join(' AND ')}
+      ORDER BY t.date ASC, COALESCE(t.start_time, t.created_qbt) ASC, t.id ASC
+    SQL
+    res = @db.exec_params(sql, params)
+    res.map { |r| r }
+  end
+
+  # Simple helper to list distinct technicians present in a jobsite
+  # conversation within an optional date range. Useful to seed rate inputs.
+  # @return [Array<Hash>] of { user_id, user_name }
+  def technicians_for_job_conversation(conversation_id, start_date: nil, end_date: nil)
+    where = [
+      't.missive_jobsite_task_conversation_id = $1',
+      'COALESCE(t.deleted, false) IS NOT TRUE'
+    ]
+    params = [conversation_id.to_s]
+
+    if start_date
+      where << "t.date >= $#{params.length + 1}"
+      params << start_date.to_s
+    end
+
+    if end_date
+      where << "t.date <= $#{params.length + 1}"
+      params << end_date.to_s
+    end
+
+    sql = <<~SQL
+      SELECT DISTINCT t.user_id,
+             COALESCE((u.first_name || ' ' || u.last_name), 'User ' || t.user_id::text) AS user_name
+      FROM quickbooks_time_timesheets t
+      LEFT JOIN quickbooks_time_users u ON u.id = t.user_id
+      WHERE #{where.join(' AND ')}
+      ORDER BY user_name ASC
+    SQL
+    res = @db.exec_params(sql, params)
+    res.map { |r| { 'user_id' => r['user_id'], 'user_name' => r['user_name'] } }
   end
 end

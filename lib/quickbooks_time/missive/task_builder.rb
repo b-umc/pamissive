@@ -105,7 +105,7 @@ class QuickbooksTime
             start_local = tz.local_time(d.year, d.month, d.day, 9, 30, 0)
             start_utc = tz.local_to_utc(start_local)
             guessed_start = true
-            LOG.error [:dt_guess_start_time, ts['id'], :reason, :manual_entry_no_start, :date, date_s, :tz, tzid, :chosen_start, start_local]
+            #LOG.error [:dt_guess_start_time, ts['id'], :reason, :manual_entry_no_start, :date, date_s, :tz, tzid, :chosen_start, start_local]
             #LOG.debug([:fallback_start_set, start_local: start_local, start_utc: start_utc])
           end
         end
@@ -206,7 +206,7 @@ class QuickbooksTime
       # Example: " <small><s>qbt:123456</s></small>" appended to the title.
       def self.title_id_tag(id)
         #"&nbsp; [comment]: # qbt:#{CGI.escapeHTML(id)}"
-        "----<p>[qbt:#{CGI.escapeHTML(id)}]"
+        "<p>----</p><p>[qbt:#{CGI.escapeHTML(id)}]"
       end
 
       # Try to extract an id from the title. Supports:

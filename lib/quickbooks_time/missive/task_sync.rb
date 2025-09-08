@@ -55,15 +55,24 @@ class QuickbooksTime
       def sync_pair!(ts:, user_payload:, job_payload:, &done)
         desired = desired_state(ts)
 
-        user_payload = user_payload.merge(state: desired)
-        job_payload  = job_payload.merge(state: desired)
+        user_payload = user_payload&.merge(state: desired)
+        job_payload  = job_payload&.merge(state: desired)
 
         results = { user: nil, job: nil }
-        left = 2
+        # Determine how many creations we need to wait for
+        left = 0
+        left += 1 if user_payload
+        left += 1 if job_payload
+        # If nothing to do, return immediately
+        return done.call(results) if left.zero?
         join = proc { left -= 1; done.call(results) if left.zero? }
 
-        create_and_ensure!(user_payload, desired, ts[:id]) { |t| results[:user] = t; join.call }
-        create_and_ensure!(job_payload,  desired, ts[:id]) { |t| results[:job]  = t; join.call }
+        if user_payload
+          create_and_ensure!(user_payload, desired, ts[:id]) { |t| results[:user] = t; join.call }
+        end
+        if job_payload
+          create_and_ensure!(job_payload,  desired, ts[:id]) { |t| results[:job]  = t; join.call }
+        end
       end
     end
   end

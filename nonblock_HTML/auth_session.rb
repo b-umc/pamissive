@@ -81,29 +81,83 @@ class NonBlockHTML::Server::AuthServer::AuthSession
 
   def setup_missive_actions
     js_code = <<~JS
-      Missive.setActions([{
-        label: 'Open paired thread',
-        contexts: ['comment'],
-        callback: (ctx) => {
-          const socket = event.detail.socketWrapper
-          if (!socket) {
-            console.error('WebSocket not found for Missive action.');
-            return;
-          }
+      try {
+        Missive.setActions([
+          {
+            label: 'Open paired thread',
+            contexts: ['comment'],
+            callback: (ctx) => {
+              const socket = event && event.detail && event.detail.socketWrapper;
+              if (!socket) {
+                console.error('WebSocket not found for Missive action.');
+                return;
+              }
 
-          let payload = { cat: 'ctl', action: 'paired_navigation' };
-
-          if (ctx.comment && ctx.comment.task && ctx.comment.task.id) {
-            payload.task_id = ctx.comment.task.id;
-          } else {
-            const cid = ctx.conversation?.id;
-            if (!cid) return;
-            payload.conversation_id = cid;
+              let payload = { cat: 'ctl', action: 'paired_navigation' };
+              if (ctx && ctx.comment && ctx.comment.task && ctx.comment.task.id) {
+                payload.task_id = ctx.comment.task.id;
+              } else {
+                const cid = (ctx && ctx.conversation && ctx.conversation.id) || (ctx && ctx.conversationId);
+                if (!cid) return;
+                payload.conversation_id = cid;
+              }
+              socket.send(JSON.stringify(payload));
+            }
+          },
+          {
+            label: 'Build Invoice…',
+            contexts: ['conversation'],
+            callback: (ctx) => {
+              const socket = event && event.detail && event.detail.socketWrapper;
+              if (!socket) {
+                console.error('WebSocket not found for Missive action.');
+                return;
+              }
+              const cid = (ctx && ctx.conversation && ctx.conversation.id) || (ctx && ctx.conversationId);
+              socket.send(JSON.stringify({ cat: 'quickbooks_time', act: 'open_invoice', conversation_id: cid }));
+            }
+          },
+          {
+            label: 'Build Invoice (Full‑screen)…',
+            contexts: ['conversation'],
+            callback: (ctx) => {
+              const socket = event && event.detail && event.detail.socketWrapper;
+              if (!socket) {
+                console.error('WebSocket not found for Missive action.');
+                return;
+              }
+              const cid = (ctx && ctx.conversation && ctx.conversation.id) || (ctx && ctx.conversationId);
+              const today = new Date();
+              const to = new Date(today.getTime() - (0 * 24 * 60 * 60 * 1000)).toISOString().slice(0,10);
+              const from = new Date(today.getTime() - (14 * 24 * 60 * 60 * 1000)).toISOString().slice(0,10);
+              Missive.openForm({
+                title: 'Invoice Builder — Filters',
+                submitLabel: 'Next',
+                cancelLabel: 'Cancel',
+                message: 'Choose a date range, grouping and sorting. You will pick entries and rates on the next step.',
+                fields: [
+                  { id: 'from', label: 'From (YYYY-MM-DD)', type: 'text', value: from },
+                  { id: 'to', label: 'To (YYYY-MM-DD)', type: 'text', value: to },
+                  { id: 'sort', label: 'Sort', type: 'select', options: [
+                    { label: 'Date', value: 'date' },
+                    { label: 'Technician', value: 'tech' },
+                    { label: 'Duration', value: 'duration' }
+                  ], value: 'date' },
+                  { id: 'group', label: 'Group', type: 'select', options: [
+                    { label: 'By Technician', value: 'tech' },
+                    { label: 'By Day', value: 'day' },
+                    { label: 'By Week', value: 'week' }
+                  ], value: 'tech' },
+                  { id: 'preselect', label: 'Preselect all entries', type: 'checkbox', value: true }
+                ],
+                onSubmit: (vals) => {
+                  socket.send(JSON.stringify({ cat: 'quickbooks_time', act: 'openform_step1', conversation_id: cid, params: vals }));
+                }
+              });
+            }
           }
-          
-          socket.send(JSON.stringify(payload));
-        }
-      }]);
+        ]);
+      } catch (e) { console.error('setActions failed', e); }
     JS
     @ws.send_js(js_code)
   end

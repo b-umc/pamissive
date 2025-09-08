@@ -341,7 +341,7 @@ class NonBlockHTML::Server::Session
     case data['action']
     when 'logout' then clear_session
     when 'toggle_google_drive' then toggle_google_drive
-    when 'toggle_quickbooks_time' then @system['quickbooks_time'].clicked
+    when 'toggle_quickbooks_time' then toggle_quickbooks_time
     when 'paired_navigation' then @system['quickbooks_time'].paired_navigation(data)
     when 'click_away' then click_away
     else
@@ -462,6 +462,25 @@ class NonBlockHTML::Server::Session
     handle_drive_request({ 'action' => 'browse_folder' })
   end
 
+  def toggle_quickbooks_time
+    qbt = @system['quickbooks_time']
+    qbt.clicked
+    open = qbt.opened
+    send_js(%(
+      (function(){
+        var drawer = document.getElementById('quickbooks_time');
+        if (!drawer) return;
+        if (#{open ? 'true' : 'false'}) {
+          drawer.classList.add('box-collapsable--opened');
+        } else {
+          drawer.classList.remove('box-collapsable--opened');
+        }
+        var arrow = document.getElementById('quickbooks_time_arrow');
+        if (arrow) { arrow.style.transform = 'rotate(' + (#{open ? '90' : '0'}) + 'deg)'; }
+      })();
+    ))
+  end
+
   def category_div
     send_message(%(
       <div id="service-directory">
@@ -553,7 +572,7 @@ class NonBlockHTML::Server::Session
         <div id="quickbooks_time" class="box box-collapsable padding-small">
           <div class="columns-middle" ws-send hx-vals='{"cat": "ctl", "clicked": true, "action": "toggle_quickbooks_time"}' hx-trigger="click">
             <span>
-            <i class="icon icon-menu-right" style="height: 10px;">
+            <i id="quickbooks_time_arrow" class="icon icon-menu-right" style="height: 10px;">
               <svg style="width: 24px; height: 24px;">
                 <use href="#menu-right" />
               </svg>

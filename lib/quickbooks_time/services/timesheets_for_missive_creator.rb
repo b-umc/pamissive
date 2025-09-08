@@ -41,7 +41,14 @@ class TimesheetsForMissiveCreator
 
   def process_one_timesheet(ts, &callback)
     user_payload = QuickbooksTime::Missive::TaskBuilder.build_user_task_creation_payload(ts)[:tasks]
-    job_payload  = QuickbooksTime::Missive::TaskBuilder.build_jobsite_task_creation_payload(ts)[:tasks]
+    # Skip creating a job task when jobsite id is invalid (0 or nil)
+    job_id = ts['quickbooks_time_jobsite_id'] || ts['jobcode_id']
+    job_payload = nil
+    if job_id && job_id.to_i > 0
+      job_payload = QuickbooksTime::Missive::TaskBuilder.build_jobsite_task_creation_payload(ts)[:tasks]
+    else
+      LOG.warn [:skip_job_task_for_invalid_job_id, ts['id'], job_id]
+    end
 
     @task_sync.sync_pair!(
       ts: ts,

@@ -7,6 +7,7 @@ require_relative 'services/timesheets_deleted_syncer'
 require_relative 'services/timesheets_today_scanner'
 require_relative 'services/timesheets_for_missive_creator'
 require_relative 'services/missive_task_verifier'
+require_relative 'services/summaries_refresher'
 require_relative 'missive/client'
 require_relative 'util/constants'
 require_relative '../../nonblock_socket/select_controller'
@@ -19,7 +20,7 @@ class QuickbooksTime
 
   POLL_METHODS = [
     :poll_last_modified,
-    #:poll_timesheets_today,
+    :poll_timesheets_today,
     :process_timesheets_for_missive_tasks,
     :reconcile_missive_task_states,
     :verify_missive_tasks,
@@ -54,6 +55,8 @@ class QuickbooksTime
       timesheets: nil,
       timesheets_deleted: nil
     }
+    # Run a full summary rebuild only once after program launch.
+    @did_initial_summary_rebuild = false
   end
 
   def auth=(auth)
@@ -196,6 +199,25 @@ class QuickbooksTime
           end
         end
 
+        # If timesheets are equal and we've already edge-triggered once for
+        # this timestamp (i.e., should_sync? would skip), then trigger a full
+        # summary rebuild only once after program launch.
+        begin
+          if ts_remote_t && ts_local_t && (ts_remote_t == ts_local_t)
+            if @lm_edge_trigger[:timesheets] == ts_remote_t
+              unless @did_initial_summary_rebuild
+                LOG.info [:trigger_initial_summary_rebuild, ts_remote_t.iso8601]
+                @did_initial_summary_rebuild = true
+                SummariesRefresher.new(repos).rebuild_all do |ok|
+                  LOG.info [:summary_rebuild_complete, ok]
+                end
+              end
+            end
+          end
+        rescue => e
+          LOG.error [:summary_rebuild_equal_skip_error, e.class, e.message]
+        end
+
         # Apply the same rewind guard for the deleted stream
         begin
           if ts_del_remote_t && ts_del_local_t && (ts_del_remote_t < ts_del_local_t)
@@ -248,19 +270,37 @@ class QuickbooksTime
   end
 
   def process_timesheets_for_missive_tasks
-    TimesheetsForMissiveCreator.new(repos).run do
+    if Constants::MISSIVE_USE_TASKS
+      TimesheetsForMissiveCreator.new(repos).run do
+        add_timeout(method(:process_timesheets_for_missive_tasks), POLL_INTERVAL)
+      end
+    else
+      # No-op when using summary-only mode
       add_timeout(method(:process_timesheets_for_missive_tasks), POLL_INTERVAL)
     end
   end
 
   def reconcile_missive_task_states
-    QuickbooksTime::TaskStateReconciler.new(repos).run do
+    if Constants::MISSIVE_USE_TASKS
+      QuickbooksTime::TaskStateReconciler.new(repos).run do
+        add_timeout(method(:reconcile_missive_task_states), POLL_INTERVAL)
+      end
+    else
       add_timeout(method(:reconcile_missive_task_states), POLL_INTERVAL)
     end
   end
 
   def verify_missive_tasks
-    QuickbooksTime::MissiveTaskVerifier.new(repos).run do
+    if Constants::MISSIVE_USE_TASKS
+      QuickbooksTime::MissiveTaskVerifier.new(repos).run do
+        add_timeout(method(:verify_missive_tasks), Constants::MISSIVE_VERIFY_INTERVAL)
+      end
+    else
+      # Still checkpoint the summary queue periodically so it can drain
+      begin
+        QuickbooksTime::Missive::SummaryQueue.verify_completed!
+      rescue StandardError
+      end
       add_timeout(method(:verify_missive_tasks), Constants::MISSIVE_VERIFY_INTERVAL)
     end
   end

@@ -40,7 +40,7 @@ class TimesheetsTodayScanner
 
         touched[ts['jobcode_id']] = true
 
-        if old_task_ids && !old_task_ids.empty?
+        if Constants::MISSIVE_USE_TASKS && old_task_ids && !old_task_ids.empty?
           ts['user_name'] ||= @users_repo.name(ts['user_id'])
           ts['jobsite_name'] ||= @jobs_repo.name(ts['jobcode_id'])
           update_payload = QuickbooksTime::Missive::TaskBuilder.build_task_update_payload(ts)
@@ -50,7 +50,7 @@ class TimesheetsTodayScanner
       end
 
       # Kick the Missive queue after enqueuing updates on this page
-      QuickbooksTime::Missive::Queue.drain_global(repo: @ts_repo)
+      QuickbooksTime::Missive::Queue.drain_global(repo: @ts_repo) if Constants::MISSIVE_USE_TASKS
 
       if resp['more']
         page += 1

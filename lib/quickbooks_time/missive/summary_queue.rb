@@ -25,8 +25,9 @@ class QuickbooksTime
           return unless conversation_id && type && date
           d = date.is_a?(Date) ? date : (Date.parse(date.to_s) rescue nil)
           return unless d
-          # Only post summaries for today; drop backdated/future dates.
-          if d != Date.today
+          # Only post summaries for today by default; allow historical when enabled.
+          allow_hist = ENV.fetch('MISSIVE_SUMMARY_ALLOW_HISTORICAL', '0') == '1'
+          if d != Date.today && !allow_hist
             LOG.debug [:summary_enqueue_skipped_non_today, conversation_id.to_s, type.to_sym, d.to_s]
             return
           end
@@ -58,8 +59,9 @@ class QuickbooksTime
 
           # Select only keys for today that were enqueued before or at the
           # last verification checkpoint.
+          allow_hist = ENV.fetch('MISSIVE_SUMMARY_ALLOW_HISTORICAL', '0') == '1'
           today_s = Date.today.to_s
-          keys = @pending.select { |k, t| k[2] == today_s && t <= @last_verify_at }.keys
+          keys = @pending.select { |k, t| (allow_hist || k[2] == today_s) && t <= @last_verify_at }.keys
           # Remove only the keys we plan to process; keep later ones pending
           keys.each { |k| @pending.delete(k) }
           return done&.call if keys.empty?

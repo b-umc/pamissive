@@ -43,7 +43,25 @@ class UsersRepo
     @db.exec('SELECT * FROM quickbooks_time_users WHERE missive_conversation_id IS NULL').to_a
   end
 
+  def conversation_id(user_id)
+    res = @db.exec_params('SELECT missive_conversation_id FROM quickbooks_time_users WHERE id=$1', [user_id])
+    res.ntuples.zero? ? nil : res[0]['missive_conversation_id']
+  end
+
   def update_conversation_id(user_id, conversation_id)
     @db.exec_params('UPDATE quickbooks_time_users SET missive_conversation_id=$1 WHERE id=$2', [conversation_id, user_id])
+  end
+
+  # Returns users marked inactive in QBT who already have a Missive conversation.
+  # Each row includes id, name fields and missive_conversation_id.
+  def inactive_with_conversation
+    sql = <<~SQL
+      SELECT id, first_name, last_name, missive_conversation_id
+      FROM quickbooks_time_users
+      WHERE COALESCE(active, true) IS NOT TRUE
+        AND missive_conversation_id IS NOT NULL
+      ORDER BY last_modified DESC NULLS LAST, id ASC
+    SQL
+    @db.exec(sql).to_a
   end
 end

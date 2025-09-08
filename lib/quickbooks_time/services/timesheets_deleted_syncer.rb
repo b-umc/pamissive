@@ -3,6 +3,9 @@
 require_relative '../streams/timesheets_deleted_stream'
 require_relative '../missive/queue'
 require_relative '../missive/summary_queue'
+require_relative '../util/constants'
+require_relative 'summary_poster'
+require 'ostruct'
 require_relative 'overview_refresher'
 require_relative '../../../logging/app_logger'
 
@@ -14,6 +17,7 @@ class TimesheetsDeletedSyncer
     @ts_repo   = repos.timesheets
     @jobs_repo = repos.jobs
     @users_repo = repos.users
+    @summary_poster = SummaryPoster.new(OpenStruct.new(timesheets: @ts_repo, jobs: @jobs_repo, users: @users_repo))
   end
 
   def run(&done)
@@ -37,33 +41,51 @@ class TimesheetsDeletedSyncer
             ts['user_name'] ||= @users_repo&.name(ts['user_id']) if defined?(@users_repo)
             ts['jobsite_name'] ||= @jobs_repo&.name(ts['quickbooks_time_jobsite_id'])
 
-            update_payload = QuickbooksTime::Missive::TaskBuilder.build_task_update_payload(ts)
-            if existing['missive_user_task_id']
-              QuickbooksTime::Missive::Queue.enqueue_update_task(existing['missive_user_task_id'], update_payload)
-            end
-            if existing['missive_jobsite_task_id']
-              QuickbooksTime::Missive::Queue.enqueue_update_task(existing['missive_jobsite_task_id'], update_payload)
-            end
-            QuickbooksTime::Missive::Queue.drain_global(repo: @ts_repo)
+            if Constants::MISSIVE_USE_TASKS
+              update_payload = QuickbooksTime::Missive::TaskBuilder.build_task_update_payload(ts)
+              if existing['missive_user_task_id']
+                QuickbooksTime::Missive::Queue.enqueue_update_task(existing['missive_user_task_id'], update_payload)
+              end
+              if existing['missive_jobsite_task_id']
+                QuickbooksTime::Missive::Queue.enqueue_update_task(existing['missive_jobsite_task_id'], update_payload)
+              end
+              QuickbooksTime::Missive::Queue.drain_global(repo: @ts_repo)
 
-            # Enqueue summary updates for the day
-            begin
-              if existing['missive_user_task_conversation_id']
-                QuickbooksTime::Missive::SummaryQueue.enqueue(
-                  conversation_id: existing['missive_user_task_conversation_id'],
-                  type: :user,
-                  date: existing['date']
-                )
+              # Enqueue summary updates for the day
+              begin
+                if existing['missive_user_task_conversation_id']
+                  QuickbooksTime::Missive::SummaryQueue.enqueue(
+                    conversation_id: existing['missive_user_task_conversation_id'],
+                    type: :user,
+                    date: existing['date']
+                  )
+                end
+                if existing['missive_jobsite_task_conversation_id']
+                  QuickbooksTime::Missive::SummaryQueue.enqueue(
+                    conversation_id: existing['missive_jobsite_task_conversation_id'],
+                    type: :job,
+                    date: existing['date']
+                  )
+                end
+              rescue => e
+                LOG.warn [:summary_enqueue_on_delete_failed, id, e.message]
               end
-              if existing['missive_jobsite_task_conversation_id']
-                QuickbooksTime::Missive::SummaryQueue.enqueue(
-                  conversation_id: existing['missive_jobsite_task_conversation_id'],
-                  type: :job,
-                  date: existing['date']
-                )
+            else
+              # Summary-only mode: post fresh summaries (user with notify, job silent)
+              begin
+                if Constants::MISSIVE_DEFER_DURING_FULL_RESYNC && (ENV['QBT_FULL_RESYNC'] == '1')
+                  next
+                end
+                next unless Constants::MISSIVE_LIVE_UPDATES
+                uid = ts['user_id']
+                jid = ts['quickbooks_time_jobsite_id']
+                date_s = ts['date']
+                notify = { title: "Timesheet deleted • #{date_s}", body: "#{ts['user_name']} @ #{ts['jobsite_name']}" }
+                @summary_poster.post_user(user_id: uid, date: date_s, notify: notify) { }
+                @summary_poster.post_job(job_id: jid, date: date_s, notify: nil) { }
+              rescue => e
+                LOG.warn [:summary_post_on_delete_failed, id, e.message]
               end
-            rescue => e
-              LOG.warn [:summary_enqueue_on_delete_failed, id, e.message]
             end
           rescue StandardError => e
             LOG.warn [:timesheet_delete_update_failed, id, e.message]
